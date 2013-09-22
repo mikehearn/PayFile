@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.effect.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.paint.*?>
+<?import javafx.scene.text.*?>
+
+<AnchorPane id="AnchorPane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" style="" xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/2.2" fx:controller="net.plan99.payfile.gui.ConnectServerController">
+  <children>
+    <VBox alignment="CENTER" layoutY="100.0" prefHeight="200.0" prefWidth="600.0" spacing="20.0" style="-fx-background-color: white;" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+      <children>
+        <Label fx:id="titleLabel" text="Connect to server">
+          <font>
+            <Font size="25.0" />
+          </font>
+        </Label>
+        <TextField id="address" fx:id="server" prefWidth="354.0" promptText="Example: riker.plan99.net">
+          <VBox.margin>
+            <Insets left="40.0" right="40.0" />
+          </VBox.margin>
+        </TextField>
+        <HBox alignment="CENTER" fillHeight="true" prefHeight="30.0" prefWidth="600.0" spacing="50.0" VBox.vgrow="NEVER">
+          <children>
+            <Button id="sendBtn" fx:id="connectBtn" defaultButton="true" disable="true" mnemonicParsing="false" onAction="#connect" prefWidth="79.0" text="Connect" />
+          </children>
+        </HBox>
+      </children>
+      <effect>
+        <DropShadow />
+      </effect>
+    </VBox>
+  </children>
+</AnchorPane>

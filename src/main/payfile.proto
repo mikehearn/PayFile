@@ -1,0 +1,76 @@
+package net.plan99.payfile;
+
+message PayFileMessage {
+    enum Type {
+        // Protocol goes like this: firstly you find out what files are available by having the client
+        // send a QUERY_FILES message to the server.
+        QUERY_FILES = 1;
+        // The server sends a MANIFEST telling what it's got and how much it's gonna cost you ...
+        MANIFEST = 2;
+        // Client sets up a micropayment channel to the server for however much money it wants.
+        // These messages just pass opaque byte arrays back and forth, the actual payment channels
+        // protocol is embedded inside this one.
+        PAYMENT = 3;
+        // Client sends a DOWNLOAD_CHUNK message asking for a part of the given file, including
+        // a micropayment for doing so.
+        DOWNLOAD_CHUNK = 4;
+        // Server sends back a DATA message containing the requested chunk.
+        DATA = 5;
+
+        // Either side can send this.
+        ERROR = 6;
+    }
+    required Type type = 1;
+
+    optional QueryFiles query_files = 2;
+    optional Manifest manifest = 3;
+    optional bytes payment = 4;
+    optional DownloadChunk download_chunk = 5;
+    optional Data data = 6;
+    optional Error error = 7;
+}
+
+message QueryFiles {
+    // The program that's gonna do the downloading.
+    required string user_agent = 1;
+
+    // Verify up-front that we're on the same Bitcoin network (main, test, regtest, litecoin, etc).
+    // If this doesn't match the server network we'll get an ERROR after QUERY_FILES.
+    required string bitcoin_network = 2;
+}
+
+message File {
+    // A unique file name.
+    required string file_name = 1;
+    required int64 size = 2;   // In bytes.
+    optional string description = 3;
+    // Satoshis per chunk charged for this file.
+    required int32 price_per_chunk = 4;
+    // Number that will be used to refer to this file later.
+    required int32 handle = 5;
+}
+
+message Manifest {
+    repeated File files = 1;
+    required int32 chunk_size = 2;  // Usually 1kb.
+}
+
+message DownloadChunk {
+    // File handle we're downloading.
+    required int32 handle = 1;
+    // Offset into the file in terms of chunks.
+    required int64 chunk_id = 2;
+    // Number of chunks to download at once.
+    optional int32 num_chunks = 3 [default = 1];
+}
+
+message Data {
+    required int32 handle = 1;
+    required int64 chunk_id = 2;
+    required bytes data = 3;
+}
+
+message Error {
+    required string code = 1;
+    optional string explanation = 2;
+}
