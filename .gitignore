@@ -1,0 +1,5 @@
+.idea
+*.wallet
+*.spvchain
+target/
+*.iml
