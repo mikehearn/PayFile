@@ -51,6 +51,9 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class Server implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(Server.class);
+    // 50kb chunk size. If we swapped in a faster ECDSA implementation then we could decrease this a lot, but
+    // bouncy castle is really slow. bitcoinj has some basic support for sipa's libsecp256k1 which would let
+    // us speed up the download significantly.
     private static final int CHUNK_SIZE = 1024*50;
     private static final int PORT = 18754;
     private static final int MIN_ACCEPTED_CHUNKS = 5;   // Require download of at least this many chunks.

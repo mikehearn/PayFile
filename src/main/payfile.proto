@@ -11,8 +11,8 @@ message PayFileMessage {
         // These messages just pass opaque byte arrays back and forth, the actual payment channels
         // protocol is embedded inside this one.
         PAYMENT = 3;
-        // Client sends a DOWNLOAD_CHUNK message asking for a part of the given file, including
-        // a micropayment for doing so.
+        // Client sends a DOWNLOAD_CHUNK message asking for a part of the given file. The client should
+        // have sent a micropayment for the chunk beforehand.
         DOWNLOAD_CHUNK = 4;
         // Server sends back a DATA message containing the requested chunk.
         DATA = 5;
@@ -36,11 +36,15 @@ message QueryFiles {
 
     // Verify up-front that we're on the same Bitcoin network (main, test, regtest, litecoin, etc).
     // If this doesn't match the server network we'll get an ERROR after QUERY_FILES.
+    // The strings are from the ID field of the bitcoinj NetworkParameters objects:
+    //
+    // org.bitcoin.production
+    // org.bitcoin.test   (this is used for both testnet and regtest mode but that may change in future)
     required string bitcoin_network = 2;
 }
 
 message File {
-    // A unique file name.
+    // A unique file name. Can contain spaces, arbitrary UTF-8, any extension etc.
     required string file_name = 1;
     required int64 size = 2;   // In bytes.
     optional string description = 3;
@@ -52,7 +56,8 @@ message File {
 
 message Manifest {
     repeated File files = 1;
-    required int32 chunk_size = 2;  // Usually 1kb.
+    // Size in bytes of each chunk.
+    required int32 chunk_size = 2;
 }
 
 message DownloadChunk {
@@ -64,6 +69,7 @@ message DownloadChunk {
     optional int32 num_chunks = 3 [default = 1];
 }
 
+// Sent back from the server to the client.
 message Data {
     required int32 handle = 1;
     required int64 chunk_id = 2;
@@ -71,6 +77,14 @@ message Data {
 }
 
 message Error {
+    // From ProtocolException.Code, one of:
+    //
+    //   GENERIC
+    //   NETWORK_MISMATCH
+    //   INTERNAL_ERROR
+    //
+    // Note that the micropayment protocol has its own internal error messages, so this is just for the non payments
+    // part of the system.
     required string code = 1;
     optional string explanation = 2;
 }
