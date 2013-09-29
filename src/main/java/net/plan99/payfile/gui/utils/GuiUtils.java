@@ -65,9 +65,8 @@ public class GuiUtils {
     }
 
     public static void handleCrashesOnThisThread() {
-        Thread.currentThread().setUncaughtExceptionHandler((thread, exception) -> {
-            GuiUtils.crashAlert(Throwables.getRootCause(exception));
-        });
+        Thread.currentThread().setUncaughtExceptionHandler(
+                (thread, exception) -> GuiUtils.crashAlert(Throwables.getRootCause(exception)));
     }
 
     public static void informationalAlert(String message, String details) {

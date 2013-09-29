@@ -271,6 +271,7 @@ public class Server implements Runnable {
                     if (reason != PaymentChannelCloseException.CloseReason.CLIENT_REQUESTED_CLOSE) {
                         log.error("{}: Payments terminated abnormally: {}", peerName, reason);
                     }
+                    payments = null;
                 }
 
                 @Override

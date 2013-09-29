@@ -62,16 +62,21 @@ public class PayFileClient {
 
     public void disconnect() {
         running = false;
-        if (paymentChannelClient != null) {
-            // Tell it to terminate the payment relationship and thus broadcast the micropayment transactions.
-            paymentChannelClient.close();
-            // Tell it we're disconnecting on the socket level.
-            paymentChannelClient.connectionClosed();
-        }
+        if (paymentChannelClient != null)
+            releasePaymentChannel();
         try {
             input.close();
             output.close();
         } catch (IOException ignored) {}
+    }
+
+    public void releasePaymentChannel() {
+        if (paymentChannelClient == null) return;
+        // Tell it to terminate the payment relationship and thus broadcast the micropayment transactions.
+        paymentChannelClient.close();
+        // Tell it we're disconnecting on the socket level.
+        paymentChannelClient.connectionClosed();
+        paymentChannelClient = null;
     }
 
     /**
@@ -79,7 +84,6 @@ public class PayFileClient {
      * after a clean disconnect.
      */
     public BigInteger getRemainingBalance() {
-        // TODO: Fill this out when payment channels API is more mature.
         final StoredPaymentChannelClientStates extension = StoredPaymentChannelClientStates.getFromWallet(wallet);
         checkNotNull(extension);
         BigInteger valueRefunded = extension.getBalanceForServer(getServerID());

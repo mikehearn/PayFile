@@ -139,6 +139,8 @@ public class Controller {
     }
 
     public void sendMoneyOut(ActionEvent event) {
+        // Free up the users money, if any is suspended in a payment channel for this server.
+        Main.client.releasePaymentChannel();
         // Hide this UI and show the send money UI. This UI won't be clickable until the user dismisses send_money.
         Main.instance.overlayUI("send_money.fxml");
     }
@@ -151,19 +153,22 @@ public class Controller {
     }
 
     public void download(ActionEvent event) throws Exception {
-        DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Select download directory");
-        File directory = chooser.showDialog(Main.instance.mainWindow);
-        if (directory == null)
-            return;
-        // The animation will start running once we return to the main loop, and the download will happen in the
-        // background.
-        final PayFileClient.File downloadingFile = checkNotNull(selectedFile);
-        final File destination = new File(directory, downloadingFile.getFileName());
-        syncProgress.setProgress(0.0);
-        progressBarLabel.setText("Downloading " + downloadingFile.getFileName());
-        final long startTime = System.currentTimeMillis();
+        File destination = null;
         try {
+            final PayFileClient.File downloadingFile = checkNotNull(selectedFile);
+            if (downloadingFile.getPrice() > getBalance().longValue())
+                throw new ValueOutOfRangeException("");
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle("Select download directory");
+            File directory = chooser.showDialog(Main.instance.mainWindow);
+            if (directory == null)
+                return;
+            // The animation will start running once we return to the main loop, and the download will happen in the
+            // background.
+            destination = new File(directory, downloadingFile.getFileName());
+            syncProgress.setProgress(0.0);
+            progressBarLabel.setText("Downloading " + downloadingFile.getFileName());
+            final long startTime = System.currentTimeMillis();
             // Make an output stream that updates the GUI when data is written to it.
             FileOutputStream stream = new FileOutputStream(destination) {
                 @Override
@@ -178,11 +183,12 @@ public class Controller {
                 }
             };
             final ListenableFuture<Void> future = Main.client.downloadFile(selectedFile, stream);
+            final File fDestination = destination;
             Futures.addCallback(future, new FutureCallback<Void>() {
                 @Override
                 public void onSuccess(Void result) {
                     int secondsTaken = (int) (System.currentTimeMillis() - startTime) / 1000;
-                    GuiUtils.runAlert((stage, controller) -> controller.withOpenFile(stage, downloadingFile, destination, secondsTaken));
+                    GuiUtils.runAlert((stage, controller) -> controller.withOpenFile(stage, downloadingFile, fDestination, secondsTaken));
                     animateSwap();
                 }
 
@@ -195,7 +201,8 @@ public class Controller {
             // Now we've started, swap in the progress bar with an animation.
             animateSwap();
         } catch (ValueOutOfRangeException e) {
-            destination.delete();
+            if (destination != null)
+                destination.delete();
             final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.getPrice()));
             GuiUtils.informationalAlert("Insufficient funds",
                     format("This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price));
@@ -271,17 +278,23 @@ public class Controller {
     }
 
     public void refreshBalanceLabel() {
+        BigInteger amount = getBalance();
+        balance.setText(Utils.bitcoinValueToFriendlyString(amount));
+    }
+
+    private BigInteger getBalance() {
         BigInteger amount;
         if (Main.client != null)
             amount = Main.client.getRemainingBalance();
         else
             amount = Main.bitcoin.wallet().getBalance();
-        balance.setText(Utils.bitcoinValueToFriendlyString(amount));
+        return amount;
     }
 
-    public void setFiles(List<PayFileClient.File> files) {
+    public void prepareForDisplay(List<PayFileClient.File> files) {
         this.files = files;
         List<String> names = Lists.transform(files, PayFileClient.File::getFileName);
         filesList.setItems(FXCollections.observableList(names));
+        refreshBalanceLabel();
     }
 }

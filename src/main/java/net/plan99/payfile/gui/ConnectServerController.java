@@ -80,7 +80,8 @@ public class ConnectServerController {
         Futures.addCallback(client.queryFiles(), new FutureCallback<List<PayFileClient.File>>() {
             @Override
             public void onSuccess(List<PayFileClient.File> result) {
-                Main.instance.controller.setFiles(result);
+                checkState(Platform.isFxApplicationThread());
+                Main.instance.controller.prepareForDisplay(result);
                 GuiUtils.fadeIn(Main.instance.mainUI);
                 Main.instance.mainUI.setVisible(true);
                 overlayUi.done();
