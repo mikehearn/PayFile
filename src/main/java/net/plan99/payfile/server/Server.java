@@ -82,7 +82,7 @@ public class Server implements Runnable {
         BriefLogFormatter.init();
 
         defaultPricePerChunk = 100;   // satoshis
-        directoryToServe = new File("/tmp/xx");
+        directoryToServe = new File(args[0]);
         if (!buildFileList())
             return;
 
@@ -92,18 +92,11 @@ public class Server implements Runnable {
                 super.addWalletExtensions();
                 wallet().addExtension(new StoredPaymentChannelServerStates(wallet(), peerGroup()));
             }
-
-            @Override
-            protected void onSetupCompleted() {
-                super.onSetupCompleted();
-                peerGroup().setUserAgent("PayFile Server", "1.0");
-            }
         };
         if (PARAMS == RegTestParams.get()) {
             appkit.connectToLocalHost();
         }
-        appkit.setAutoSave(true);
-        appkit.startAndWait();
+        appkit.setUserAgent("PayFile Server", "1.0").startAndWait();
 
         System.out.println(appkit.wallet().toString(false, true, true, appkit.chain()));
 

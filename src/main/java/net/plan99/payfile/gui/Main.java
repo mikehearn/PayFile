@@ -46,14 +46,31 @@ import java.net.Socket;
 import java.net.URL;
 
 // To do list:
-// - Make payment channel closing work properly: stored channels should be deleted when the channel is closed.
+//
+// Payments:
+// - Restart by connecting to the same server as last time.
+// - App must remember what server it was connected to, and when that changes, connect back to the previous one and
+//   ask it to release funds before starting the next channel.
+// - Progress indicator for negotiating a payment channel?
 // - Make the server disconnect and channel close when the "Send money out" button is pressed.
+// - Test that it all works with the latest channel API changes.
+// - Add an inspector that lets you see when you'll get the money back, if the server is unreachable.
+//
+// Misc code quality:
+// - Consider switching to P2Proto (question: how to do SSL with that?). Simplifies the core protocol.
+// - SSL support
+//
+// Generic UI:
 // - Render the files with the descriptions and prices as well.
 // - Solve the Mac menubar issue. Port the Mac specific tweaks to wallet-template.
 // - Write a test plan that exercises every reasonable path through the app and test it.
 // - Get an Apple developer ID and a Windows codesigning cert.
 // - Find a way to dual boot Windows on my laptop.
 // - Build, sign and test native packages!
+//
+// Future ideas:
+// - Merkle tree validators for files, to avoid a server maliciously serving junk instead of the real deal.
+
 
 public class Main extends Application {
     public static String APP_NAME = "PayFile";
@@ -132,6 +149,7 @@ public class Main extends Application {
         // or progress widget to keep the user engaged whilst we initialise, but we don't.
         bitcoin.setDownloadListener(controller.progressBarUpdater())
                .setBlockingStartup(false)
+               .setUserAgent("PayFile Client", "1.0")
                .startAndWait();
         // Don't make the user wait for confirmations for now, as the intention is they're sending it their own money!
         bitcoin.wallet().allowSpendingUnconfirmedTransactions();
