@@ -26,8 +26,6 @@ import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.bitcoin.utils.Threading;
 import com.google.common.base.Throwables;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -37,13 +35,15 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import net.plan99.payfile.client.PayFileClient;
-import net.plan99.payfile.gui.utils.GuiUtils;
 import net.plan99.payfile.gui.utils.TextFieldValidator;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.URL;
+import java.util.concurrent.CompletableFuture;
+
+import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 // To do list:
 //
@@ -89,13 +89,13 @@ public class Main extends Application {
     public void start(Stage mainWindow) throws Exception {
         instance = this;
         // Show the crash dialog for any exceptions that we don't handle and that hit the main loop.
-        GuiUtils.handleCrashesOnThisThread();
+        handleCrashesOnThisThread();
         try {
             init(mainWindow);
         } catch (Throwable t) {
             // Nicer message for the case where the block store file is locked.
             if (Throwables.getRootCause(t) instanceof BlockStoreException) {
-                GuiUtils.informationalAlert("Already running", "This application is already running and cannot be started twice.");
+                informationalAlert("Already running", "This application is already running and cannot be started twice.");
             } else {
                 throw t;
             }
@@ -110,7 +110,7 @@ public class Main extends Application {
         // Load the GUI. The Controller class will be automagically created and wired up.
         URL location = getClass().getResource("main.fxml");
         FXMLLoader loader = new FXMLLoader(location);
-        mainUI = (Pane) loader.load();
+        mainUI = loader.load();
         controller = loader.getController();
         // Configure the window with a StackPane so we can overlay things on top of the main UI.
         uiStack = new StackPane(mainUI);
@@ -145,8 +145,7 @@ public class Main extends Application {
             bitcoin.setCheckpoints(getClass().getResourceAsStream("checkpoints"));
         }
 
-        // Now configure and start the appkit. This will take a second or two - we could show a temporary splash screen
-        // or progress widget to keep the user engaged whilst we initialise, but we don't.
+        // Now configure and start the appkit. It won't block for very long.
         bitcoin.setDownloadListener(controller.progressBarUpdater())
                .setBlockingStartup(false)
                .setUserAgent("PayFile Client", "1.0")
@@ -170,8 +169,9 @@ public class Main extends Application {
         }
 
         public void done() {
-            GuiUtils.fadeOutAndRemove(ui, uiStack);
-            GuiUtils.blurIn(mainUI);
+            checkGuiThread();
+            fadeOutAndRemove(ui, uiStack);
+            blurIn(mainUI);
             this.ui = null;
             this.controller = null;
         }
@@ -180,10 +180,11 @@ public class Main extends Application {
     /** Loads the FXML file with the given name, blurs out the main UI and puts this one on top. */
     public OverlayUI overlayUI(String name) {
         try {
+            checkGuiThread();
             // Load the UI from disk.
             URL location = getClass().getResource(name);
             FXMLLoader loader = new FXMLLoader(location);
-            Pane ui = (Pane) loader.load();
+            Pane ui = loader.load();
             Object controller = loader.getController();
             OverlayUI pair = new OverlayUI(ui, controller);
             // Auto-magically set the overlayUi member, if it's there.
@@ -191,9 +192,9 @@ public class Main extends Application {
                 controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
             } catch (IllegalAccessException | NoSuchFieldException ignored) {
             }
-            GuiUtils.blurOut(mainUI);
+            blurOut(mainUI);
             uiStack.getChildren().add(ui);
-            GuiUtils.fadeIn(ui);
+            fadeIn(ui);
             return pair;
         } catch (IOException e) {
             throw new RuntimeException(e);  // Can't happen.
@@ -201,21 +202,14 @@ public class Main extends Application {
     }
 
     /** Connect to the given server in the background and return the client object when done. */
-    public ListenableFuture<PayFileClient> connect(String server) {
-        final SettableFuture<PayFileClient> future = SettableFuture.create();
-        new Thread("Connect to server thread") {
-            @Override
-            public void run() {
-                try {
-                    Socket socket = new Socket(server, PayFileClient.PORT);
-                    PayFileClient client = new PayFileClient(socket, bitcoin.wallet());
-                    future.set(client);
-                } catch (Exception e) {
-                    future.setException(e);
-                }
+    public CompletableFuture<PayFileClient> connect(String server) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return new PayFileClient(new Socket(server, PayFileClient.PORT), bitcoin.wallet());
+            } catch (IOException e) {
+                throw Throwables.propagate(e);
             }
-        }.start();
-        return future;
+        });
     }
 
     @Override

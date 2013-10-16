@@ -11,7 +11,9 @@ import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
-import net.plan99.payfile.gui.utils.GuiUtils;
+
+import static net.plan99.payfile.gui.utils.GuiUtils.crashAlert;
+import static net.plan99.payfile.gui.utils.GuiUtils.informationalAlert;
 
 public class SendMoneyController {
     public Button sendBtn;
@@ -37,7 +39,7 @@ public class SendMoneyController {
             final Wallet.SendResult sendResult = Main.bitcoin.wallet().sendCoins(req);
             if (sendResult == null) {
                 // We couldn't empty the wallet for some reason. TODO: When bitcoinj issue 425 is fixed, be more helpful
-                GuiUtils.informationalAlert("Could not empty the wallet",
+                informationalAlert("Could not empty the wallet",
                         "You may have too little money left in the wallet to make a transaction.");
                 overlayUi.done();
                 return;
@@ -45,16 +47,15 @@ public class SendMoneyController {
             Futures.addCallback(sendResult.broadcastComplete, new FutureCallback<Transaction>() {
                 @Override
                 public void onSuccess(Transaction result) {
-                    // TODO: Fix bitcoinj so these callbacks run on the user thread.
-                    Platform.runLater(overlayUi::done);
+                    overlayUi.done();
                 }
 
                 @Override
                 public void onFailure(Throwable t) {
                     // We died trying to empty the wallet.
-                    Platform.runLater(() -> GuiUtils.crashAlert(t));
+                    crashAlert(t);
                 }
-            });
+            }, Platform::runLater);
             sendBtn.setDisable(true);
             address.setDisable(true);
             titleLabel.setText("Broadcasting ...");

@@ -26,7 +26,6 @@ import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.PaymentChannelServer;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelServerStates;
 import com.google.bitcoin.utils.BriefLogFormatter;
-import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import net.plan99.payfile.Payfile;
@@ -42,6 +41,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 /**
@@ -278,9 +278,8 @@ public class Server implements Runnable {
                 @Override
                 public void paymentIncrease(BigInteger by, BigInteger to) {
                     long byAmount = by.longValue();
-                    Preconditions.checkArgument(byAmount > 0);
-                    // TODO: Fix this once slf4j is upgraded.
-                    log.info("{}: Increased balance by {} to {}", new Object[]{peerName, byAmount, balance});
+                    checkArgument(byAmount > 0);
+                    log.info("{}: Increased balance by {} to {}", peerName, byAmount, balance);
                     balance += byAmount;
                 }
             });
@@ -313,6 +312,7 @@ public class Server implements Runnable {
                 long chunkId = downloadChunk.getChunkId() + i;
                 if (chunkId == 0)
                     log.info("{}: Starting download of {}", peerName, file.getFileName());
+                // This is super inefficient.
                 File diskFile = new File(directoryToServe, file.getFileName());
                 FileInputStream fis = new FileInputStream(diskFile);
                 final long offset = chunkId * CHUNK_SIZE;
@@ -321,7 +321,7 @@ public class Server implements Runnable {
                 byte[] chunk = new byte[CHUNK_SIZE];
                 final int bytesActuallyRead = fis.read(chunk);
                 if (bytesActuallyRead < 0) {
-                    log.error("Reached EOF");
+                    log.debug("Reached EOF");
                 } else if (bytesActuallyRead > 0 && bytesActuallyRead < chunk.length) {
                     chunk = Arrays.copyOf(chunk, bytesActuallyRead);
                 }

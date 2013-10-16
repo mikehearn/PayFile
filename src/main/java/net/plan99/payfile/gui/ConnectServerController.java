@@ -16,8 +16,6 @@
 
 package net.plan99.payfile.gui;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
@@ -25,13 +23,12 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import net.plan99.payfile.ProtocolException;
 import net.plan99.payfile.client.PayFileClient;
-import net.plan99.payfile.gui.utils.GuiUtils;
 
 import java.net.UnknownHostException;
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 public class ConnectServerController {
     public Button connectBtn;
@@ -41,9 +38,7 @@ public class ConnectServerController {
 
     // Called by FXMLLoader
     public void initialize() {
-        server.textProperty().addListener((observableValue, prev, current) -> {
-            connectBtn.setDisable(current.trim().isEmpty());
-        });
+        server.textProperty().addListener((val, prev, current) -> connectBtn.setDisable(current.trim().isEmpty()));
 
         // Temp for testing
         server.setText("localhost");
@@ -54,52 +49,48 @@ public class ConnectServerController {
         checkState(!serverName.trim().isEmpty());
         final String previousTitle = titleLabel.getText();
         titleLabel.setText("Connecting ...");
-        Futures.addCallback(Main.instance.connect(serverName), new FutureCallback<PayFileClient>() {
-            @Override
-            public void onSuccess(PayFileClient result) {
-                Main.client = checkNotNull(result);
-                queryFiles(result);
-            }
 
-            @Override
-            public void onFailure(Throwable t) {
-                titleLabel.setText(previousTitle);
-                String message = t.toString();
-                if (t instanceof UnknownHostException) {
-                    // More friendly message for the most common failure kind.
-                    message = "Could not find domain name of server.";
-                }
-                GuiUtils.informationalAlert("Failed to connect to '" + serverName + "'", message);
+        Main.instance.connect(serverName).handle((client, ex) -> {
+            if (ex != null) {
+                Platform.runLater(() -> handleConnectError(ex, serverName, previousTitle));
+                return null;
             }
-        }, Platform::runLater);
+            Main.client = client;
+            return client.queryFiles().handleAsync((files, ex2) -> {
+                if (ex2 != null)
+                    handleQueryFilesError(ex2);
+                else
+                    showUIWithFiles(files);
+                return null;
+            }, Platform::runLater);
+        });
     }
 
-    private void queryFiles(PayFileClient client) {
-        // Ask the server what files it has.
-        checkState(Platform.isFxApplicationThread());
-        Futures.addCallback(client.queryFiles(), new FutureCallback<List<PayFileClient.File>>() {
-            @Override
-            public void onSuccess(List<PayFileClient.File> result) {
-                checkState(Platform.isFxApplicationThread());
-                Main.instance.controller.prepareForDisplay(result);
-                GuiUtils.fadeIn(Main.instance.mainUI);
-                Main.instance.mainUI.setVisible(true);
-                overlayUi.done();
-            }
+    private void showUIWithFiles(List<PayFileClient.File> files) {
+        checkGuiThread();
+        Main.instance.controller.prepareForDisplay(files);
+        fadeIn(Main.instance.mainUI);
+        Main.instance.mainUI.setVisible(true);
+        overlayUi.done();
+    }
 
-            @Override
-            public void onFailure(Throwable t) {
-                if (t instanceof ProtocolException) {
-                    final ProtocolException protocolException = (ProtocolException) t;
-                    if (protocolException.getCode() == ProtocolException.Code.NETWORK_MISMATCH) {
-                        String errorMsg = String.format("The remote server is not using the same crypto-currency as " +
-                                "you.%n%s", protocolException.getMessage());
-                        GuiUtils.informationalAlert("Network mismatch", errorMsg);
-                        return;
-                    }
-                }
-                GuiUtils.crashAlert(t);
-            }
-        }, Platform::runLater);
+    private void handleConnectError(Throwable ex, String serverName, String previousTitle) {
+        checkGuiThread();
+        titleLabel.setText(previousTitle);
+        String message = ex.toString();
+        if (ex instanceof UnknownHostException) {
+            // More friendly message for the most common failure kind.
+            message = "Could not find domain name of server.";
+        }
+        informationalAlert("Failed to connect to '" + serverName + "'", message);
+    }
+
+    private void handleQueryFilesError(Throwable ex2) {
+        if (ex2 instanceof ProtocolException && ((ProtocolException) ex2).getCode() == ProtocolException.Code.NETWORK_MISMATCH) {
+            String msg = String.format("The remote server is not using the same crypto-currency as you.%n%s", ex2.getMessage());
+            informationalAlert("Network mismatch", msg);
+            return;
+        }
+        crashAlert(ex2);
     }
 }

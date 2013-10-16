@@ -20,9 +20,6 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
 import com.google.bitcoin.uri.BitcoinURI;
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -41,8 +38,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import net.plan99.payfile.client.PayFileClient;
-import net.plan99.payfile.gui.utils.GuiUtils;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.awt.*;
 import java.io.File;
@@ -54,9 +51,8 @@ import java.util.Date;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
-import static javafx.application.Platform.isFxApplicationThread;
+import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 /**
  * Gets created auto-magically by FXMLLoader via reflection. The widget fields are set to the GUI controls they're named
@@ -112,7 +108,7 @@ public class Controller {
                 Desktop.getDesktop().browse(URI.create(uri));
             } catch (IOException e) {
                 // Couldn't open wallet app.
-                GuiUtils.crashAlert(e);
+                crashAlert(e);
             }
         }
     }
@@ -147,7 +143,7 @@ public class Controller {
 
     public void disconnect(ActionEvent event) {
         Main.client.disconnect();
-        GuiUtils.fadeOut(Main.instance.mainUI);
+        fadeOut(Main.instance.mainUI);
         filesList.setItems(FXCollections.emptyObservableList());
         Main.instance.overlayUI("connect_server.fxml");
     }
@@ -172,7 +168,7 @@ public class Controller {
             // Make an output stream that updates the GUI when data is written to it.
             FileOutputStream stream = new FileOutputStream(destination) {
                 @Override
-                public void write(byte[] b) throws IOException {
+                public void write(@Nonnull byte[] b) throws IOException {
                     super.write(b);
                     final long bytesDownloaded = downloadingFile.getBytesDownloaded();
                     double done = bytesDownloaded / (double) downloadingFile.getSize();
@@ -182,29 +178,24 @@ public class Controller {
                     });
                 }
             };
-            final ListenableFuture<Void> future = Main.client.downloadFile(selectedFile, stream);
             final File fDestination = destination;
-            Futures.addCallback(future, new FutureCallback<Void>() {
-                @Override
-                public void onSuccess(Void result) {
+            animateSwap();  // Now we've started, swap in the progress bar with an animation.
+            Main.client.downloadFile(selectedFile, stream).handleAsync((ok, ex) -> {
+                animateSwap();  // And swap back out again ...
+                if (ex != null) {
+                    crashAlert(ex);
+                } else {
                     int secondsTaken = (int) (System.currentTimeMillis() - startTime) / 1000;
-                    GuiUtils.runAlert((stage, controller) -> controller.withOpenFile(stage, downloadingFile, fDestination, secondsTaken));
-                    animateSwap();
+                    runAlert((stage, controller) ->
+                            controller.withOpenFile(stage, downloadingFile, fDestination, secondsTaken));
                 }
-
-                @Override
-                public void onFailure(Throwable t) {
-                    GuiUtils.crashAlert(t);
-                    animateSwap();
-                }
+                return null;
             }, Platform::runLater);
-            // Now we've started, swap in the progress bar with an animation.
-            animateSwap();
         } catch (ValueOutOfRangeException e) {
             if (destination != null)
                 destination.delete();
             final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.getPrice()));
-            GuiUtils.informationalAlert("Insufficient funds",
+            informationalAlert("Insufficient funds",
                     format("This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price));
         }
     }
@@ -216,7 +207,7 @@ public class Controller {
         }
     }
 
-    public class ProgressBarUpdater extends DownloadListener {
+    private class ProgressBarUpdater extends DownloadListener {
         @Override
         protected void progress(double pct, int blocksSoFar, Date date) {
             super.progress(pct, blocksSoFar, date);
@@ -269,15 +260,15 @@ public class Controller {
         return new ProgressBarUpdater();
     }
 
-    public class BalanceUpdater extends AbstractWalletEventListener {
+    private class BalanceUpdater extends AbstractWalletEventListener {
         @Override
         public void onWalletChanged(Wallet wallet) {
-            checkState(isFxApplicationThread());
             refreshBalanceLabel();
         }
     }
 
     public void refreshBalanceLabel() {
+        checkGuiThread();
         BigInteger amount = getBalance();
         balance.setText(Utils.bitcoinValueToFriendlyString(amount));
     }
