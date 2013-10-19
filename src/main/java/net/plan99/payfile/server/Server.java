@@ -119,6 +119,7 @@ public class Server implements Runnable {
         manifest = new ArrayList<>();
         int counter = 0;
         for (File f : files) {
+            if (f.isDirectory() || f.isHidden()) continue;
             Payfile.File file = Payfile.File.newBuilder()
                     .setFileName(f.getName())
                     .setDescription("Some cool file")
