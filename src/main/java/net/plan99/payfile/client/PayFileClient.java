@@ -177,11 +177,16 @@ public class PayFileClient {
             if (!file.isAffordable())
                 throw new ValueOutOfRangeException("Cannot afford this file");
             log.info("Price is {}, ensuring payments are initialised ... ", file.getPrice());
-            initializePayments().thenAccept((v) -> {
+            initializePayments().handle((v, ex) -> {
                 try {
-                    log.info("Payments initialised. Downloading file {} {}", file.getHandle(), file.getFileName());
-                    currentDownloads.add(file);
-                    downloadNextChunk(file);
+                    if (ex == null) {
+                        log.info("Payments initialised. Downloading file {} {}", file.getHandle(), file.getFileName());
+                        currentDownloads.add(file);
+                        downloadNextChunk(file);
+                    } else {
+                        currentFuture.completeExceptionally(ex);
+                    }
+                    return null;
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
