@@ -71,8 +71,9 @@ public class GuiUtils {
                 (thread, exception) -> GuiUtils.crashAlert(Throwables.getRootCause(exception)));
     }
 
-    public static void informationalAlert(String message, String details) {
-        Runnable r = () -> runAlert((stage, controller) -> controller.informational(stage, message, details));
+    public static void informationalAlert(String message, String details, Object... args) {
+        String formattedDetails = String.format(details, args);
+        Runnable r = () -> runAlert((stage, controller) -> controller.informational(stage, message, formattedDetails));
         if (Platform.isFxApplicationThread())
             r.run();
         else

@@ -40,7 +40,6 @@ import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import net.plan99.payfile.client.PayFileClient;
 
-import javax.annotation.Nonnull;
 import java.awt.*;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -54,7 +53,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.String.format;
-import static javafx.beans.binding.Bindings.*;
+import static javafx.beans.binding.Bindings.isNull;
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 /**
@@ -62,7 +61,7 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
  * after. This class handles all the updates and event handling for the main UI.
  */
 public class Controller {
-    public ProgressBar syncProgress;
+    public ProgressBar progressBar;
     public VBox syncBox;
     public HBox controlsBox;
     public Label requestMoneyLink;
@@ -75,22 +74,22 @@ public class Controller {
     private Address primaryAddress;
 
     // PayFile specific stuff
-    public Button downloadBtn;
+    public Button downloadBtn, cancelBtn;
     public ListView<PayFileClient.File> filesList;
-
     private ObservableList<PayFileClient.File> files;
     private ReadOnlyObjectProperty<PayFileClient.File> selectedFile;
     private CompletableFuture<Void> downloadFuture;
 
-
     // Called by FXMLLoader.
     public void initialize() {
-        syncProgress.setProgress(-1);
+        progressBar.setProgress(-1);
         addressLabelBox.setOpacity(0.0);
         Tooltip tooltip = new Tooltip("Copy address to clipboard");
         Tooltip.install(copyWidget, tooltip);
 
-        // The PayFileClient.File.toString() method is good enough.
+        cancelBtn.setVisible(false);
+
+        // The PayFileClient.File.toString() method is good enough for rendering list cells for now.
         files = FXCollections.observableArrayList();
         filesList.setItems(files);
         selectedFile = filesList.getSelectionModel().selectedItemProperty();
@@ -161,39 +160,34 @@ public class Controller {
             final PayFileClient.File downloadingFile = checkNotNull(selectedFile.get());
             if (downloadingFile.getPrice() > getBalance().longValue())
                 throw new ValueOutOfRangeException("");
+            // Ask the user where to put it.
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Select download directory");
             File directory = chooser.showDialog(Main.instance.mainWindow);
             if (directory == null)
                 return;
-            // The animation will start running once we return to the main loop, and the download will happen in the
-            // background.
             destination = new File(directory, downloadingFile.getFileName());
-            syncProgress.setProgress(0.0);
-            progressBarLabel.setText("Downloading " + downloadingFile.getFileName());
+            FileOutputStream fileStream = new FileOutputStream(destination);
             final long startTime = System.currentTimeMillis();
-            // Make an output stream that updates the GUI when data is written to it.
-            FileOutputStream stream = new FileOutputStream(destination) {
-                @Override
-                public void write(@Nonnull byte[] b) throws IOException {
-                    super.write(b);
-                    final long bytesDownloaded = downloadingFile.getBytesDownloaded();
-                    double done = bytesDownloaded / (double) downloadingFile.getSize();
-                    Platform.runLater(() -> {
-                        syncProgress.setProgress(done);
-                        refreshBalanceLabel();
-                    });
-                }
-            };
-            final File fDestination = destination;
-            animateSwap();  // Now we've started, swap in the progress bar with an animation.
+            cancelBtn.setVisible(true);
+            progressBarLabel.setText("Downloading " + downloadingFile);
+            // Make the UI update whilst the download is in progress: progress bar and balance label.
+            ProgressOutputStream stream = new ProgressOutputStream(fileStream, downloadingFile.getSize());
+            progressBar.progressProperty().bind(stream.progressProperty());
+            Main.client.setOnPaymentMade((amt) -> Platform.runLater(this::refreshBalanceLabel));
+            // Swap in the progress bar with an animation.
+            animateSwap();
+            // ... and start the download.
             downloadFuture = Main.client.downloadFile(downloadingFile, stream);
+            final File fDestination = destination;
+            // When we're done ...
             downloadFuture.handleAsync((ok, exception) -> {
-                animateSwap();  // And swap back out again ...
+                animateSwap();  // ... swap widgets back out again
                 if (exception != null) {
                     if (!(exception instanceof CancellationException))
                         crashAlert(exception);
                 } else {
+                    // Otherwise inform the user we're finished and let them open the file.
                     int secondsTaken = (int) (System.currentTimeMillis() - startTime) / 1000;
                     runAlert((stage, controller) ->
                             controller.withOpenFile(stage, downloadingFile, fDestination, secondsTaken));
@@ -205,7 +199,7 @@ public class Controller {
                 destination.delete();
             final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.get().getPrice()));
             informationalAlert("Insufficient funds",
-                    format("This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price));
+                    "This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price);
         }
     }
 
@@ -218,21 +212,6 @@ public class Controller {
 
     public void cancelOperation(ActionEvent event) {
         downloadFuture.cancel(true);
-        downloadFuture = null;
-    }
-
-    private class ProgressBarUpdater extends DownloadListener {
-        @Override
-        protected void progress(double pct, int blocksSoFar, Date date) {
-            super.progress(pct, blocksSoFar, date);
-            Platform.runLater(() -> syncProgress.setProgress(pct / 100.0));
-        }
-
-        @Override
-        protected void doneDownload() {
-            super.doneDownload();
-            Platform.runLater(Controller.this::readyToGoAnimation);
-        }
     }
 
     public void readyToGoAnimation() {
@@ -255,12 +234,12 @@ public class Controller {
 
     private boolean controlsBoxOnScreen = true;
 
+    /** Swap the download/disconnect buttons for a progress bar + cancel button */
     public void animateSwap() {
         Node n1 = controlsBoxOnScreen ? controlsBox : syncBox;
         Node n2 = controlsBoxOnScreen ? syncBox : controlsBox;
         TranslateTransition leave = new TranslateTransition(Duration.millis(600), n1);
         leave.setByY(80.0);
-        // Buttons slide in and clickable address appears simultaneously.
         TranslateTransition arrive = new TranslateTransition(Duration.millis(600), n2);
         arrive.setToY(0.0);
         SequentialTransition both = new SequentialTransition(leave, arrive);
@@ -270,8 +249,22 @@ public class Controller {
         controlsBoxOnScreen = !controlsBoxOnScreen;
     }
 
-    public ProgressBarUpdater progressBarUpdater() {
-        return new ProgressBarUpdater();
+    private class BlockChainSyncListener extends DownloadListener {
+        @Override
+        protected void progress(double pct, int blocksSoFar, Date date) {
+            super.progress(pct, blocksSoFar, date);
+            Platform.runLater(() -> progressBar.setProgress(pct / 100.0));
+        }
+
+        @Override
+        protected void doneDownload() {
+            super.doneDownload();
+            Platform.runLater(Controller.this::readyToGoAnimation);
+        }
+    }
+
+    public BlockChainSyncListener progressBarUpdater() {
+        return new BlockChainSyncListener();
     }
 
     private class BalanceUpdater extends AbstractWalletEventListener {

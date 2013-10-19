@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Throwables.propagate;
@@ -43,6 +44,7 @@ public class PayFileClient {
     private List<File> currentDownloads = new CopyOnWriteArrayList<>();
     private PaymentChannelClient paymentChannelClient;
     private volatile boolean running;
+    private Consumer<Long> onPaymentMade;
 
     public PayFileClient(Socket socket, Wallet wallet) {
         try {
@@ -88,6 +90,10 @@ public class PayFileClient {
         checkNotNull(extension);
         BigInteger valueRefunded = extension.getBalanceForServer(getServerID());
         return wallet.getBalance().add(valueRefunded);
+    }
+
+    public void setOnPaymentMade(Consumer<Long> onPaymentMade) {
+        this.onPaymentMade = onPaymentMade;
     }
 
     public class File {
@@ -256,8 +262,11 @@ public class PayFileClient {
             return;
         // Write two messages, one after the other: add to our balance, then spend it.
         try {
-            if (paymentChannelClient != null)
+            if (paymentChannelClient != null) {
                 paymentChannelClient.incrementPayment(BigInteger.valueOf(file.pricePerChunk));
+                if (onPaymentMade != null)
+                    onPaymentMade.accept(file.pricePerChunk);
+            }
         } catch (ValueOutOfRangeException e) {
             // We ran out of moneyzz???
             throw new RuntimeException(e);

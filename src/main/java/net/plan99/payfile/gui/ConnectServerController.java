@@ -38,7 +38,7 @@ public class ConnectServerController {
 
     // Called by FXMLLoader
     public void initialize() {
-        server.textProperty().addListener((val, prev, current) -> connectBtn.setDisable(current.trim().isEmpty()));
+        server.textProperty().addListener((observableValue, prev, current) -> connectBtn.setDisable(current.trim().isEmpty()));
 
         // Temp for testing
         server.setText("localhost");
@@ -87,8 +87,8 @@ public class ConnectServerController {
 
     private void handleQueryFilesError(Throwable ex2) {
         if (ex2 instanceof ProtocolException && ((ProtocolException) ex2).getCode() == ProtocolException.Code.NETWORK_MISMATCH) {
-            String msg = String.format("The remote server is not using the same crypto-currency as you.%n%s", ex2.getMessage());
-            informationalAlert("Network mismatch", msg);
+            informationalAlert("Network mismatch", "The remote server is not using the same crypto-currency as you.%n%s",
+                    ex2.getMessage());
             return;
         }
         crashAlert(ex2);
