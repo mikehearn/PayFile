@@ -19,10 +19,11 @@ package net.plan99.payfile.gui;
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
 import com.google.bitcoin.uri.BitcoinURI;
-import com.google.common.collect.Lists;
 import javafx.animation.*;
 import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -40,7 +41,6 @@ import javafx.util.Duration;
 import net.plan99.payfile.client.PayFileClient;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.awt.*;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -49,9 +49,12 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.String.format;
+import static javafx.beans.binding.Bindings.*;
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 /**
@@ -73,9 +76,12 @@ public class Controller {
 
     // PayFile specific stuff
     public Button downloadBtn;
-    public ListView<String> filesList;
-    private List<PayFileClient.File> files;
-    @Nullable private PayFileClient.File selectedFile;
+    public ListView<PayFileClient.File> filesList;
+
+    private ObservableList<PayFileClient.File> files;
+    private ReadOnlyObjectProperty<PayFileClient.File> selectedFile;
+    private CompletableFuture<Void> downloadFuture;
+
 
     // Called by FXMLLoader.
     public void initialize() {
@@ -84,11 +90,12 @@ public class Controller {
         Tooltip tooltip = new Tooltip("Copy address to clipboard");
         Tooltip.install(copyWidget, tooltip);
 
-        filesList.getSelectionModel().selectedIndexProperty().addListener((observableValue, prev, current) -> {
-            final int index = current.intValue();
-            selectedFile = index >= 0 ? files.get(index) : null;
-            downloadBtn.setDisable(index < 0);
-        });
+        // The PayFileClient.File.toString() method is good enough.
+        files = FXCollections.observableArrayList();
+        filesList.setItems(files);
+        selectedFile = filesList.getSelectionModel().selectedItemProperty();
+        // Don't allow the user to press download unless an item is selected.
+        downloadBtn.disableProperty().bind(isNull(selectedFile));
     }
 
     public void onBitcoinSetup() {
@@ -144,14 +151,14 @@ public class Controller {
     public void disconnect(ActionEvent event) {
         Main.client.disconnect();
         fadeOut(Main.instance.mainUI);
-        filesList.setItems(FXCollections.emptyObservableList());
+        files.clear();
         Main.instance.overlayUI("connect_server.fxml");
     }
 
     public void download(ActionEvent event) throws Exception {
         File destination = null;
         try {
-            final PayFileClient.File downloadingFile = checkNotNull(selectedFile);
+            final PayFileClient.File downloadingFile = checkNotNull(selectedFile.get());
             if (downloadingFile.getPrice() > getBalance().longValue())
                 throw new ValueOutOfRangeException("");
             DirectoryChooser chooser = new DirectoryChooser();
@@ -180,10 +187,12 @@ public class Controller {
             };
             final File fDestination = destination;
             animateSwap();  // Now we've started, swap in the progress bar with an animation.
-            Main.client.downloadFile(selectedFile, stream).handleAsync((ok, ex) -> {
+            downloadFuture = Main.client.downloadFile(downloadingFile, stream);
+            downloadFuture.handleAsync((ok, exception) -> {
                 animateSwap();  // And swap back out again ...
-                if (ex != null) {
-                    crashAlert(ex);
+                if (exception != null) {
+                    if (!(exception instanceof CancellationException))
+                        crashAlert(exception);
                 } else {
                     int secondsTaken = (int) (System.currentTimeMillis() - startTime) / 1000;
                     runAlert((stage, controller) ->
@@ -194,7 +203,7 @@ public class Controller {
         } catch (ValueOutOfRangeException e) {
             if (destination != null)
                 destination.delete();
-            final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.getPrice()));
+            final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.get().getPrice()));
             informationalAlert("Insufficient funds",
                     format("This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price));
         }
@@ -205,6 +214,11 @@ public class Controller {
             // Double click on a file: shortcut for downloading.
             download(null);
         }
+    }
+
+    public void cancelOperation(ActionEvent event) {
+        downloadFuture.cancel(true);
+        downloadFuture = null;
     }
 
     private class ProgressBarUpdater extends DownloadListener {
@@ -283,9 +297,7 @@ public class Controller {
     }
 
     public void prepareForDisplay(List<PayFileClient.File> files) {
-        this.files = files;
-        List<String> names = Lists.transform(files, PayFileClient.File::getFileName);
-        filesList.setItems(FXCollections.observableList(names));
+        this.files.setAll(files);
         refreshBalanceLabel();
     }
 }

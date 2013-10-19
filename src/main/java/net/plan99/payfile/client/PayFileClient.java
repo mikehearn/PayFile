@@ -247,6 +247,8 @@ public class PayFileClient {
     }
 
     private void downloadNextChunk(File file) throws IOException {
+        if (currentFuture.isCompletedExceptionally())
+            return;
         // Write two messages, one after the other: add to our balance, then spend it.
         try {
             if (paymentChannelClient != null)
