@@ -110,6 +110,11 @@ public class PayFileClient {
             this.pricePerChunk = pricePerChunk;
         }
 
+        @Override
+        public String toString() {
+            return getFileName();
+        }
+
         public long getBytesDownloaded() {
             return bytesDownloaded;
         }
