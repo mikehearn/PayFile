@@ -41,12 +41,12 @@ public class ConnectServerController {
         server.textProperty().addListener((observableValue, prev, current) -> connectBtn.setDisable(current.trim().isEmpty()));
 
         // Temp for testing
-        server.setText("localhost");
+        server.setText(Main.preferences.get("lastServer", ""));
     }
 
     public void connect(ActionEvent event) {
-        final String serverName = server.getText();
-        checkState(!serverName.trim().isEmpty());
+        final String serverName = server.getText().trim();
+        checkState(!serverName.isEmpty());
         final String previousTitle = titleLabel.getText();
         titleLabel.setText("Connecting ...");
 
@@ -57,10 +57,12 @@ public class ConnectServerController {
             }
             Main.client = client;
             return client.queryFiles().handleAsync((files, ex2) -> {
-                if (ex2 != null)
+                if (ex2 != null) {
                     handleQueryFilesError(ex2);
-                else
+                } else {
+                    Main.preferences.put("lastServer", serverName);
                     showUIWithFiles(files);
+                }
                 return null;
             }, Platform::runLater);
         });

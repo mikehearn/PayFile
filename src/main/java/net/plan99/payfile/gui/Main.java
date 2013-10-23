@@ -42,6 +42,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
+import java.util.prefs.Preferences;
 
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
@@ -77,6 +78,8 @@ public class Main extends Application {
     public static String APP_NAME = "PayFile";
 
     public static NetworkParameters params = RegTestParams.get();
+    public static Preferences preferences;
+
     public static WalletAppKit bitcoin;
     public static Main instance;
     public static PayFileClient client;
@@ -155,6 +158,8 @@ public class Main extends Application {
         bitcoin.wallet().allowSpendingUnconfirmedTransactions();
         System.out.println(bitcoin.wallet());
         controller.onBitcoinSetup();
+
+        preferences = Preferences.userNodeForPackage(Main.class);
         overlayUI("connect_server.fxml");
         mainUI.setVisible(false);
         mainWindow.show();
