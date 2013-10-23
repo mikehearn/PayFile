@@ -48,7 +48,7 @@
         <GridPane>
           <children>
             <Label fx:id="progressBarLabel" maxWidth="1.7976931348623157E308" text="Synchronizing with network ..." GridPane.columnIndex="0" GridPane.columnSpan="2147483647" GridPane.rowIndex="0" />
-            <Button fx:id="cancelButton" alignment="CENTER" mnemonicParsing="false" onAction="#cancelOperation" text="Cancel" GridPane.columnIndex="1" GridPane.halignment="RIGHT" GridPane.rowIndex="1" />
+            <Button fx:id="cancelBtn" alignment="CENTER" mnemonicParsing="false" onAction="#cancelOperation" text="Cancel" GridPane.columnIndex="1" GridPane.halignment="RIGHT" GridPane.rowIndex="1" />
             <ProgressBar id="syncProgress" fx:id="progressBar" maxWidth="1.7976931348623157E308" prefWidth="-1.0" progress="0.0" GridPane.columnIndex="0" GridPane.rowIndex="1" />
           </children>
           <columnConstraints>
