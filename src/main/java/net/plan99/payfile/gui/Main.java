@@ -26,6 +26,7 @@ import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.bitcoin.utils.Threading;
 import com.google.common.base.Throwables;
+import com.google.common.net.HostAndPort;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -39,6 +40,7 @@ import net.plan99.payfile.gui.utils.TextFieldValidator;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
@@ -75,7 +77,8 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 
 public class Main extends Application {
-    public static String APP_NAME = "PayFile";
+    public static final String APP_NAME = "PayFile";
+    public static final int CONNECT_TIMEOUT_MSEC = 2000;
 
     public static NetworkParameters params = RegTestParams.get();
     public static Preferences preferences;
@@ -211,7 +214,11 @@ public class Main extends Application {
     public CompletableFuture<PayFileClient> connect(String server) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return new PayFileClient(new Socket(server, PayFileClient.PORT), bitcoin.wallet());
+                final HostAndPort hostAndPort = HostAndPort.fromString(server).withDefaultPort(PayFileClient.PORT);
+                final InetSocketAddress address = new InetSocketAddress(hostAndPort.getHostText(), hostAndPort.getPort());
+                final Socket socket = new Socket();
+                socket.connect(address, CONNECT_TIMEOUT_MSEC);
+                return new PayFileClient(socket, bitcoin.wallet());
             } catch (IOException e) {
                 throw Throwables.propagate(e);
             }

@@ -16,6 +16,7 @@
 
 package net.plan99.payfile.gui;
 
+import com.google.common.base.Throwables;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
@@ -24,6 +25,7 @@ import javafx.scene.control.TextField;
 import net.plan99.payfile.ProtocolException;
 import net.plan99.payfile.client.PayFileClient;
 
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.List;
 
@@ -52,7 +54,7 @@ public class ConnectServerController {
 
         Main.instance.connect(serverName).handle((client, ex) -> {
             if (ex != null) {
-                Platform.runLater(() -> handleConnectError(ex, serverName, previousTitle));
+                Platform.runLater(() -> handleConnectError(Throwables.getRootCause(ex), serverName, previousTitle));
                 return null;
             }
             Main.client = client;
@@ -80,9 +82,11 @@ public class ConnectServerController {
         checkGuiThread();
         titleLabel.setText(previousTitle);
         String message = ex.toString();
+        // More friendly message for the most common failure kinds.
         if (ex instanceof UnknownHostException) {
-            // More friendly message for the most common failure kind.
-            message = "Could not find domain name of server.";
+            message = "No server with that name found.";
+        } else if (ex instanceof SocketTimeoutException) {
+            message = "Connection timed out: server did not respond quickly enough";
         }
         informationalAlert("Failed to connect to '" + serverName + "'", message);
     }
