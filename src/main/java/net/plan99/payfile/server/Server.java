@@ -86,7 +86,9 @@ public class Server implements Runnable {
         if (!buildFileList())
             return;
 
-        WalletAppKit appkit = new WalletAppKit(PARAMS, new File("."), "payfile-server") {
+        final int port = args.length > 1 ? Integer.parseInt(args[1]) : PORT;
+
+        WalletAppKit appkit = new WalletAppKit(PARAMS, new File("."), "payfile-server-" + port) {
             @Override
             protected void addWalletExtensions() throws Exception {
                 super.addWalletExtensions();
@@ -100,7 +102,7 @@ public class Server implements Runnable {
 
         System.out.println(appkit.wallet().toString(false, true, true, appkit.chain()));
 
-        ServerSocket socket = new ServerSocket(PORT);
+        ServerSocket socket = new ServerSocket(port);
         Socket clientSocket;
         do {
             clientSocket = socket.accept();
