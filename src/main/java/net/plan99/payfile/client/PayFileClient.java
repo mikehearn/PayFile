@@ -27,6 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.propagate;
 
 public class PayFileClient {
@@ -45,6 +46,9 @@ public class PayFileClient {
     private PaymentChannelClient paymentChannelClient;
     private volatile boolean running;
     private Consumer<Long> onPaymentMade;
+
+    private boolean settling;
+    private CompletableFuture<Void> settlementFuture;
 
     public PayFileClient(Socket socket, Wallet wallet) {
         try {
@@ -65,20 +69,28 @@ public class PayFileClient {
     public void disconnect() {
         running = false;
         if (paymentChannelClient != null)
-            releasePaymentChannel();
+            paymentChannelClient.connectionClosed();
         try {
             input.close();
             output.close();
         } catch (IOException ignored) {}
     }
 
-    public void releasePaymentChannel() {
-        if (paymentChannelClient == null) return;
-        // Tell it to terminate the payment relationship and thus broadcast the micropayment transactions.
-        paymentChannelClient.close();
-        // Tell it we're disconnecting on the socket level.
-        paymentChannelClient.connectionClosed();
-        paymentChannelClient = null;
+    public CompletableFuture<Void> settlePaymentChannel() {
+        // Tell it to terminate the payment relationship and thus broadcast the micropayment transactions. We will
+        // resume control in destroyConnection below.
+        settling = true;
+        currentFuture = settlementFuture = new CompletableFuture<Void>();
+        if (paymentChannelClient == null) {
+            // Have to connect first.
+            return initializePayments().thenCompose((v) -> {
+                paymentChannelClient.close();
+                return settlementFuture;
+            });
+        } else {
+            paymentChannelClient.close();
+            return settlementFuture;
+        }
     }
 
     /**
@@ -90,6 +102,25 @@ public class PayFileClient {
         checkNotNull(extension);
         BigInteger valueRefunded = extension.getBalanceForServer(getServerID());
         return wallet.getBalance().add(valueRefunded);
+    }
+
+    /**
+     * Returns how much money is still stuck in a channel with the given server. Does NOT include wallet balance.
+     */
+    public static BigInteger getBalanceForServer(String serverName, int port, Wallet wallet) {
+        final StoredPaymentChannelClientStates extension = StoredPaymentChannelClientStates.getFromWallet(wallet);
+        checkNotNull(extension);
+        return extension.getBalanceForServer(getServerID(serverName, port));
+    }
+
+    /**
+     * Returns how long you have to wait until this channel will either be settled by the server, or can be auto-settled
+     * by the client (us).
+     */
+    public static long getSecondsUntilExpiry(String serverName, int port, Wallet wallet) {
+        final StoredPaymentChannelClientStates extension = StoredPaymentChannelClientStates.getFromWallet(wallet);
+        checkNotNull(extension);
+        return extension.getSecondsUntilExpiry(getServerID(serverName, port));
     }
 
     public void setOnPaymentMade(Consumer<Long> onPaymentMade) {
@@ -177,7 +208,10 @@ public class PayFileClient {
         if (file.downloadStream != null)
             throw new IllegalStateException("Already downloading this file");
         file.downloadStream = outputStream;
+
         currentFuture = file.completionFuture = new CompletableFuture<>();
+        file.completionFuture.whenComplete((v, exception) -> { if (exception != null) file.downloadStream = null; });
+
         // Set up payments and then start the download.
         if (file.getPrice() > 0) {
             if (!file.isAffordable())
@@ -239,8 +273,13 @@ public class PayFileClient {
                         if (currentFuture != null)
                             currentFuture.completeExceptionally(new PaymentChannelCloseException("Unexpected payment channel termination", reason));
                     }
-                    paymentChannelClient = null;
+                } else {
+                    checkState(settling);
+                    log.info("{}: Payment channel settled successfully.", socket);
+                    settlementFuture.complete(null);
                 }
+                paymentChannelClient.connectionClosed();
+                paymentChannelClient = null;
             }
 
             @Override
@@ -254,7 +293,11 @@ public class PayFileClient {
     }
 
     private Sha256Hash getServerID() {
-        return Sha256Hash.create(String.format("%s:%d", socket.getInetAddress(), socket.getPort()).getBytes());
+        return getServerID(socket.getInetAddress().getHostName(), socket.getPort());
+    }
+
+    private static Sha256Hash getServerID(String host, int port) {
+        return Sha256Hash.create(String.format("%s:%d", host, port).getBytes());
     }
 
     private void downloadNextChunk(File file) throws IOException {

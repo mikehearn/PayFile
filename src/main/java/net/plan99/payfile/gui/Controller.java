@@ -142,13 +142,17 @@ public class Controller {
 
     public void sendMoneyOut(ActionEvent event) {
         // Free up the users money, if any is suspended in a payment channel for this server.
-        Main.client.releasePaymentChannel();
+        //
+        // The UI races the broadcast here - we could/should throw up a spinner until the server finishes settling
+        // the channel and we know we've got the money back. TODO: Make a spinner.
+        Main.client.settlePaymentChannel();
         // Hide this UI and show the send money UI. This UI won't be clickable until the user dismisses send_money.
         Main.instance.overlayUI("send_money.fxml");
     }
 
     public void disconnect(ActionEvent event) {
         Main.client.disconnect();
+        Main.client = null;
         fadeOut(Main.instance.mainUI);
         files.clear();
         Main.instance.overlayUI("connect_server.fxml");
@@ -178,6 +182,7 @@ public class Controller {
             // Swap in the progress bar with an animation.
             animateSwap();
             // ... and start the download.
+            Settings.setLastPaidServer(Main.serverAddress);
             downloadFuture = Main.client.downloadFile(downloadingFile, stream);
             final File fDestination = destination;
             // When we're done ...

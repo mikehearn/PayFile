@@ -44,20 +44,15 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
-import java.util.prefs.Preferences;
 
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 // To do list:
 //
 // Payments:
-// - Restart by connecting to the same server as last time.
-// - App must remember what server it was connected to, and when that changes, connect back to the previous one and
-//   ask it to release funds before starting the next channel.
 // - Progress indicator for negotiating a payment channel?
-// - Make the server disconnect and channel close when the "Send money out" button is pressed.
-// - Test that it all works with the latest channel API changes.
-// - Add an inspector that lets you see when you'll get the money back, if the server is unreachable.
+// - Bug: If the server fails to broadcast the contract tx then the client gets out of sync with the server.
+// - Bug: If the client doesn't pay enough to settle the contract then the client gets out of sync with the server.
 //
 // Misc code quality:
 // - Consider switching to P2Proto (question: how to do SSL with that?). Simplifies the core protocol.
@@ -81,11 +76,11 @@ public class Main extends Application {
     public static final int CONNECT_TIMEOUT_MSEC = 2000;
 
     public static NetworkParameters params = RegTestParams.get();
-    public static Preferences preferences;
 
     public static WalletAppKit bitcoin;
     public static Main instance;
     public static PayFileClient client;
+    public static HostAndPort serverAddress;
 
     private StackPane uiStack;
     public Pane mainUI;
@@ -161,18 +156,16 @@ public class Main extends Application {
         bitcoin.wallet().allowSpendingUnconfirmedTransactions();
         System.out.println(bitcoin.wallet());
         controller.onBitcoinSetup();
-
-        preferences = Preferences.userNodeForPackage(Main.class);
         overlayUI("connect_server.fxml");
         mainUI.setVisible(false);
         mainWindow.show();
     }
 
-    public class OverlayUI {
-        Node ui;
-        Object controller;
+    public class OverlayUI<T> {
+        public Node ui;
+        public T controller;
 
-        public OverlayUI(Node ui, Object controller) {
+        public OverlayUI(Node ui, T controller) {
             this.ui = ui;
             this.controller = controller;
         }
@@ -187,15 +180,15 @@ public class Main extends Application {
     }
 
     /** Loads the FXML file with the given name, blurs out the main UI and puts this one on top. */
-    public OverlayUI overlayUI(String name) {
+    public <T> OverlayUI<T> overlayUI(String name) {
         try {
             checkGuiThread();
             // Load the UI from disk.
             URL location = getClass().getResource(name);
             FXMLLoader loader = new FXMLLoader(location);
             Pane ui = loader.load();
-            Object controller = loader.getController();
-            OverlayUI pair = new OverlayUI(ui, controller);
+            T controller = loader.getController();
+            OverlayUI<T> pair = new OverlayUI<T>(ui, controller);
             // Auto-magically set the overlayUi member, if it's there.
             try {
                 controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
@@ -210,16 +203,19 @@ public class Main extends Application {
         }
     }
 
-    /** Connect to the given server in the background and return the client object when done. */
-    public CompletableFuture<PayFileClient> connect(String server) {
+    public static CompletableFuture<PayFileClient> connect(HostAndPort server) {
+        serverAddress = server;
+        return connect(serverAddress, CONNECT_TIMEOUT_MSEC);
+    }
+
+    public static CompletableFuture<PayFileClient> connect(HostAndPort server, int timeoutMsec) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                final HostAndPort hostAndPort = HostAndPort.fromString(server).withDefaultPort(PayFileClient.PORT);
-                final InetSocketAddress address = new InetSocketAddress(hostAndPort.getHostText(), hostAndPort.getPort());
+                final InetSocketAddress address = new InetSocketAddress(server.getHostText(), server.getPort());
                 final Socket socket = new Socket();
-                socket.connect(address, CONNECT_TIMEOUT_MSEC);
+                socket.connect(address, timeoutMsec);
                 return new PayFileClient(socket, bitcoin.wallet());
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw Throwables.propagate(e);
             }
         });
