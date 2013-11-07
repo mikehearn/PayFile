@@ -11,6 +11,8 @@
 <?import javafx.scene.paint.*?>
 <?import javafx.scene.text.*?>
 
+<?import net.plan99.payfile.gui.controls.ClickableBitcoinAddress?>
+
 <AnchorPane id="AnchorPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" minHeight="200.0" minWidth="300.0" prefHeight="400.0" prefWidth="600.0" style="-fx-background-color: white;" xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/2.2" fx:controller="net.plan99.payfile.gui.Controller">
   <children>
     <ImageView fitHeight="243.0" fitWidth="243.0" opacity="0.28" pickOnBounds="true" preserveRatio="true" AnchorPane.bottomAnchor="-36.0" AnchorPane.rightAnchor="-34.0">
@@ -72,31 +74,7 @@
         <Button fx:id="disconnectBtn" disable="false" mnemonicParsing="false" onAction="#disconnect" text="Disconnect" />
       </children>
     </HBox>
-    <HBox fx:id="addressLabelBox" alignment="CENTER_LEFT" layoutY="45.0" prefHeight="21.0" prefWidth="391.0" spacing="10.0" AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="195.0">
-      <children>
-        <Label fx:id="requestMoneyLink" onMouseClicked="#requestMoney" style="-fx-cursor: hand" text="&lt;address goes here&gt;" textFill="BLUE" underline="true">
-          <contextMenu>
-            <ContextMenu fx:id="addressMenu">
-              <items>
-                <MenuItem mnemonicParsing="false" onAction="#copyAddress" text="Copy to clipboard">
-                  <accelerator>
-                    <KeyCodeCombination alt="UP" code="C" control="DOWN" meta="UP" shift="UP" shortcut="UP" />
-                  </accelerator>
-                </MenuItem>
-              </items>
-            </ContextMenu>
-          </contextMenu>
-        </Label>
-        <ImageView fx:id="copyWidget" fitHeight="16.0" fitWidth="16.0" focusTraversable="true" onMouseClicked="#copyWidgetClicked" pickOnBounds="true" preserveRatio="true" smooth="true">
-          <image>
-            <Image url="@copy-icon.png" />
-          </image>
-          <HBox.margin>
-            <Insets />
-          </HBox.margin>
-        </ImageView>
-      </children>
-    </HBox>
+    <ClickableBitcoinAddress fx:id="addressControl" layoutY="45.0" prefHeight="21.0" prefWidth="391.0" AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="195.0" />
     <StackPane id="connectionsListView" prefHeight="249.0" prefWidth="572.0" AnchorPane.bottomAnchor="70.0" AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="14.0" AnchorPane.topAnchor="81.0">
       <children>
         <ListView fx:id="filesList" blendMode="MULTIPLY" onMouseClicked="#fileEntryClicked" prefHeight="200.0" prefWidth="200.0" style="" />

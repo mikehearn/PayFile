@@ -170,6 +170,12 @@ public class Main extends Application {
             this.controller = controller;
         }
 
+        public void show() {
+           blurOut(mainUI);
+           uiStack.getChildren().add(ui);
+           fadeIn(ui);
+        }
+
         public void done() {
             checkGuiThread();
             fadeOutAndRemove(ui, uiStack);
@@ -177,6 +183,18 @@ public class Main extends Application {
             this.ui = null;
             this.controller = null;
         }
+    }
+
+    public <T> OverlayUI<T> overlayUI(Node node, T controller) {
+        checkGuiThread();
+        OverlayUI<T> pair = new OverlayUI<>(node, controller);
+        // Auto-magically set the overlayUi member, if it's there.
+        try {
+            controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
+        } catch (IllegalAccessException | NoSuchFieldException ignored) {
+        }
+        pair.show();
+        return pair;
     }
 
     /** Loads the FXML file with the given name, blurs out the main UI and puts this one on top. */
@@ -188,15 +206,13 @@ public class Main extends Application {
             FXMLLoader loader = new FXMLLoader(location);
             Pane ui = loader.load();
             T controller = loader.getController();
-            OverlayUI<T> pair = new OverlayUI<T>(ui, controller);
+            OverlayUI<T> pair = new OverlayUI<>(ui, controller);
             // Auto-magically set the overlayUi member, if it's there.
             try {
                 controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
             } catch (IllegalAccessException | NoSuchFieldException ignored) {
             }
-            blurOut(mainUI);
-            uiStack.getChildren().add(ui);
-            fadeIn(ui);
+            pair.show();
             return pair;
         } catch (IOException e) {
             throw new RuntimeException(e);  // Can't happen.

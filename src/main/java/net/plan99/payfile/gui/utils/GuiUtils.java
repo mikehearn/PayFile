@@ -66,6 +66,7 @@ public class GuiUtils {
             Platform.runLater(r);
     }
 
+    /** Show a GUI alert box for any unhandled exceptions that propagate out of this thread. */
     public static void handleCrashesOnThisThread() {
         Thread.currentThread().setUncaughtExceptionHandler(
                 (thread, exception) -> GuiUtils.crashAlert(Throwables.getRootCause(exception)));

@@ -16,9 +16,11 @@
 
 package net.plan99.payfile.gui;
 
-import com.google.bitcoin.core.*;
+import com.google.bitcoin.core.AbstractWalletEventListener;
+import com.google.bitcoin.core.DownloadListener;
+import com.google.bitcoin.core.Utils;
+import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
-import com.google.bitcoin.uri.BitcoinURI;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -27,11 +29,9 @@ import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.*;
 import javafx.scene.control.Label;
-import javafx.scene.image.ImageView;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
@@ -39,21 +39,19 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import net.plan99.payfile.client.PayFileClient;
+import net.plan99.payfile.gui.controls.ClickableBitcoinAddress;
 
-import java.awt.*;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.math.BigInteger;
-import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.lang.String.format;
 import static javafx.beans.binding.Bindings.isNull;
+import static net.plan99.payfile.gui.Main.bitcoin;
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 /**
@@ -62,16 +60,12 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
  */
 public class Controller {
     public ProgressBar progressBar;
+    public Label progressBarLabel;
     public VBox syncBox;
     public HBox controlsBox;
-    public Label requestMoneyLink;
     public Label balance;
-    public Label progressBarLabel;
-    public ContextMenu addressMenu;
-    public HBox addressLabelBox;
     public Button sendMoneyOutBtn;
-    public ImageView copyWidget;
-    private Address primaryAddress;
+    public ClickableBitcoinAddress addressControl;
 
     // PayFile specific stuff
     public Button downloadBtn, cancelBtn;
@@ -83,9 +77,6 @@ public class Controller {
     // Called by FXMLLoader.
     public void initialize() {
         progressBar.setProgress(-1);
-        addressLabelBox.setOpacity(0.0);
-        Tooltip tooltip = new Tooltip("Copy address to clipboard");
-        Tooltip.install(copyWidget, tooltip);
 
         cancelBtn.setVisible(false);
 
@@ -98,46 +89,9 @@ public class Controller {
     }
 
     public void onBitcoinSetup() {
-        Main.bitcoin.wallet().addEventListener(new BalanceUpdater());
-        primaryAddress = Main.bitcoin.wallet().getKeys().get(0).toAddress(Main.params);
+        bitcoin.wallet().addEventListener(new BalanceUpdater());
+        addressControl.setAddress(bitcoin.wallet().getKeys().get(0).toAddress(Main.params).toString());
         refreshBalanceLabel();
-    }
-
-    public void requestMoney(MouseEvent event) {
-        // User clicked on the address.
-        if (event.getButton() == MouseButton.SECONDARY || (event.getButton() == MouseButton.PRIMARY && event.isMetaDown())) {
-            addressMenu.show(requestMoneyLink, event.getScreenX(), event.getScreenY());
-        } else {
-            String uri = getURI();
-            System.out.println("Opening " + uri);
-            try {
-                Desktop.getDesktop().browse(URI.create(uri));
-            } catch (IOException e) {
-                // Couldn't open wallet app.
-                crashAlert(e);
-            }
-        }
-    }
-
-    private String getURI() {
-        return BitcoinURI.convertToBitcoinURI(getAddress(), Utils.COIN, Main.APP_NAME, null);
-    }
-
-    private String getAddress() {
-        return primaryAddress.toString();
-    }
-
-    public void copyWidgetClicked(MouseEvent event) {
-        copyAddress(null);
-    }
-
-    public void copyAddress(ActionEvent event) {
-        // User clicked icon or menu item.
-        Clipboard clipboard = Clipboard.getSystemClipboard();
-        ClipboardContent content = new ClipboardContent();
-        content.putString(getAddress());
-        content.putHtml(format("<a href='%s'>%s</a>", getURI(), getAddress()));
-        clipboard.setContent(content);
     }
 
     public void sendMoneyOut(ActionEvent event) {
@@ -226,8 +180,7 @@ public class Controller {
         // Buttons slide in and clickable address appears simultaneously.
         TranslateTransition arrive = new TranslateTransition(Duration.millis(600), controlsBox);
         arrive.setToY(0.0);
-        requestMoneyLink.setText(primaryAddress.toString());
-        FadeTransition reveal = new FadeTransition(Duration.millis(500), addressLabelBox);
+        FadeTransition reveal = new FadeTransition(Duration.millis(500), addressControl);
         reveal.setToValue(1.0);
         ParallelTransition group = new ParallelTransition(arrive, reveal);
         // Slide out happens then slide in/fade happens.
@@ -290,7 +243,7 @@ public class Controller {
         if (Main.client != null)
             amount = Main.client.getRemainingBalance();
         else
-            amount = Main.bitcoin.wallet().getBalance();
+            amount = bitcoin.wallet().getBalance();
         return amount;
     }
 
