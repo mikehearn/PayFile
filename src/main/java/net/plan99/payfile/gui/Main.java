@@ -60,10 +60,10 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
 //
 // Generic UI:
 // - Render the files with the descriptions and prices as well.
-// - Wallet template: Make the clickable Bitcoin address a self-contained widget, support QR code rendering.
 // - Solve the Mac menubar issue. Port the Mac specific tweaks to wallet-template.
 // - Write a test plan that exercises every reasonable path through the app and test it.
 // - Get an Apple developer ID and a Windows codesigning cert.
+// - Find/beg/buy/borrow/steal a nice icon.
 // - Find a way to dual boot Windows on my laptop.
 // - Build, sign and test native packages!
 //
