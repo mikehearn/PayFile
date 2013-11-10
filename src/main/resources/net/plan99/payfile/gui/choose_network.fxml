@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="net.plan99.payfile.gui.ChooseNetworkController">
+<children><VBox alignment="CENTER" layoutX="-134.0" layoutY="74.0" prefHeight="200.0" prefWidth="600.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+<children><Label layoutX="20.0" layoutY="30.0" text="Choose the Bitcoin Network to connect to:" /><Button id="" fx:id="mainNetworkBtn" layoutX="-2.0" layoutY="54.5" mnemonicParsing="false" onAction="#chooseNetwork" snapToPixel="false" text="Main Bitcoin Network" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="428.0">
+<VBox.margin>
+<Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
+</VBox.margin></Button><Label layoutX="-49.0" layoutY="118.0" text="Test Networks. Only use these for testing purposes." AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="252.0">
+<VBox.margin>
+<Insets top="30.0" />
+</VBox.margin></Label><Button fx:id="testNet3Btn" layoutX="25.5" layoutY="139.0" mnemonicParsing="false" onAction="#chooseNetwork" text="TestNet3" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="505.0">
+<VBox.margin>
+<Insets top="10.0" />
+</VBox.margin></Button><Button fx:id="regTestBtn" layoutX="12.5" layoutY="174.0" mnemonicParsing="false" onAction="#chooseNetwork" text="RegTest" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="505.0">
+<VBox.margin>
+<Insets top="10.0" />
+</VBox.margin></Button>
+</children></VBox>
+</children></AnchorPane>
