@@ -1,5 +1,5 @@
 /**
- * Author: Mike Hearn <mhearn@bitcoinfoundation.org>
+ * Author: Simon de la Rouviere <sdlrouviere@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
