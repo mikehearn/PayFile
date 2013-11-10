@@ -110,6 +110,7 @@ public class Controller {
         fadeOut(Main.instance.mainUI);
         files.clear();
         Main.instance.overlayUI("connect_server.fxml");
+        //TODO if disconnected, should it return to choose network, or connect server?
     }
 
     public void download(ActionEvent event) throws Exception {

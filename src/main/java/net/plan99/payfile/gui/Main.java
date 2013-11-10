@@ -21,6 +21,7 @@ import com.google.bitcoin.core.NetworkParameters;
 import com.google.bitcoin.kits.WalletAppKit;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelClientStates;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.BriefLogFormatter;
@@ -75,7 +76,8 @@ public class Main extends Application {
     public static final String APP_NAME = "PayFile";
     public static final int CONNECT_TIMEOUT_MSEC = 2000;
 
-    public static NetworkParameters params = RegTestParams.get();
+    public static NetworkParameters params;
+    public static String filePrefix;
 
     public static WalletAppKit bitcoin;
     public static Main instance;
@@ -121,42 +123,10 @@ public class Main extends Application {
         TextFieldValidator.configureScene(scene);   // Add CSS that we need.
         mainWindow.setScene(scene);
 
-        // Make log output concise.
-        BriefLogFormatter.init();
-        // Tell bitcoinj to run event handlers on the JavaFX UI thread. This keeps things simple and means
-        // we cannot forget to switch threads when adding event handlers. Unfortunately, the DownloadListener
-        // we give to the app kit is currently an exception and runs on a library thread. It'll get fixed in
-        // a future version. Also note that this doesn't affect the default executor for ListenableFutures.
-        // That must be specified each time.
-        Threading.USER_THREAD = Platform::runLater;
-        // Create the app kit. It won't do any heavyweight initialization until after we start it.
-        bitcoin = new WalletAppKit(params, new File("."), APP_NAME) {
-            @Override
-            protected void addWalletExtensions() throws Exception {
-                super.addWalletExtensions();
-                wallet().addExtension(new StoredPaymentChannelClientStates(wallet(), peerGroup()));
-            }
-        };
-        if (params == RegTestParams.get()) {
-            bitcoin.connectToLocalHost();   // You should run a regtest mode bitcoind locally.
-        } else if (params == MainNetParams.get()) {
-            // Checkpoints are block headers that ship inside our app: for a new user, we pick the last header
-            // in the checkpoints file and then download the rest from the network. It makes things much faster.
-            // Checkpoint files are made using the BuildCheckpoints tool and usually we have to download the
-            // last months worth or more (takes a few seconds).
-            bitcoin.setCheckpoints(getClass().getResourceAsStream("checkpoints"));
-        }
+        //Allow users to first choose which network to connect to (regtest, testnet or main bitcoin network.
+        //In the future, if used as a consumer app, then this might not be needed (default BTC network).
+        overlayUI("choose_network.fxml");
 
-        // Now configure and start the appkit. It won't block for very long.
-        bitcoin.setDownloadListener(controller.progressBarUpdater())
-               .setBlockingStartup(false)
-               .setUserAgent("PayFile Client", "1.0")
-               .startAndWait();
-        // Don't make the user wait for confirmations for now, as the intention is they're sending it their own money!
-        bitcoin.wallet().allowSpendingUnconfirmedTransactions();
-        System.out.println(bitcoin.wallet());
-        controller.onBitcoinSetup();
-        overlayUI("connect_server.fxml");
         mainUI.setVisible(false);
         mainWindow.show();
     }
@@ -217,6 +187,50 @@ public class Main extends Application {
         } catch (IOException e) {
             throw new RuntimeException(e);  // Can't happen.
         }
+    }
+
+    /** Starts up the network, and calls brings up the connect server modal. */
+    public static void chooseNetwork(){
+
+        // Make log output concise.
+        BriefLogFormatter.init();
+        // Tell bitcoinj to run event handlers on the JavaFX UI thread. This keeps things simple and means
+        // we cannot forget to switch threads when adding event handlers. Unfortunately, the DownloadListener
+        // we give to the app kit is currently an exception and runs on a library thread. It'll get fixed in
+        // a future version. Also note that this doesn't affect the default executor for ListenableFutures.
+        // That must be specified each time.
+        Threading.USER_THREAD = Platform::runLater;
+        // Create the app kit. It won't do any heavyweight initialization until after we start it.
+        bitcoin = new WalletAppKit(params, new File("."), filePrefix+APP_NAME+"_client") {
+            @Override
+            protected void addWalletExtensions() throws Exception {
+                super.addWalletExtensions();
+                wallet().addExtension(new StoredPaymentChannelClientStates(wallet(), peerGroup()));
+            }
+        };
+        if (params == RegTestParams.get()) {
+            bitcoin.connectToLocalHost();   // You should run a regtest mode bitcoind locally.
+        }
+
+        //commented out for now as it seems to be giving bugs. Does TestNet have checkpoints?
+        /*else if (params == MainNetParams.get() || params == TestNet3Params.get()) {
+            // Checkpoints are block headers that ship inside our app: for a new user, we pick the last header
+            // in the checkpoints file and then download the rest from the network. It makes things much faster.
+            // Checkpoint files are made using the BuildCheckpoints tool and usually we have to download the
+            // last months worth or more (takes a few seconds).
+            bitcoin.setCheckpoints(instance.getClass().getResourceAsStream("checkpoints"));
+        }*/
+
+        // Now configure and start the appkit. It won't block for very long.
+        bitcoin.setDownloadListener(instance.controller.progressBarUpdater())
+               .setBlockingStartup(false)
+               .setUserAgent("PayFile Client", "1.0")
+               .startAndWait();
+        // Don't make the user wait for confirmations for now, as the intention is they're sending it their own money!
+        bitcoin.wallet().allowSpendingUnconfirmedTransactions();
+        System.out.println(bitcoin.wallet());
+        instance.controller.onBitcoinSetup();
+        instance.overlayUI("connect_server.fxml");
     }
 
     public static CompletableFuture<PayFileClient> connect(HostAndPort server) {

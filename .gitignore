@@ -3,3 +3,4 @@
 *.spvchain
 target/
 *.iml
+.DS_Store

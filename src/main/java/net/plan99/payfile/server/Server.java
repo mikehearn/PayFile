@@ -22,6 +22,8 @@ import com.google.bitcoin.core.TransactionBroadcaster;
 import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.kits.WalletAppKit;
 import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.PaymentChannelServer;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelServerStates;
@@ -60,7 +62,7 @@ public class Server implements Runnable {
     private static File directoryToServe;
     private static int defaultPricePerChunk;
     private static ArrayList<Payfile.File> manifest;
-    private static final NetworkParameters PARAMS = RegTestParams.get();
+    private static NetworkParameters params;
     // The client socket that we're talking to.
     private final Socket socket;
     private final Wallet wallet;
@@ -70,6 +72,7 @@ public class Server implements Runnable {
     private DataOutputStream output;
     private PaymentChannelServer payments;
     private long balance;
+    private static String filePrefix;
 
     public Server(Wallet wallet, TransactionBroadcaster transactionBroadcaster, Socket socket) {
         this.socket = socket;
@@ -81,21 +84,37 @@ public class Server implements Runnable {
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
 
+        if (args.length < 2) {
+            System.err.println("Usage: download-directory [testnet|regtest|mainnet] [port]");
+            return;
+        }
+
         defaultPricePerChunk = 100;   // satoshis
         directoryToServe = new File(args[0]);
         if (!buildFileList())
             return;
 
-        final int port = args.length > 1 ? Integer.parseInt(args[1]) : PORT;
+        if (args[1].equals("testnet")) {
+            params = TestNet3Params.get();
+            filePrefix = "testNet3";
+        } else if (args[1].equals("mainNet")) {
+            params = MainNetParams.get();
+            filePrefix = "mainNet";
+        } else if (args[1].equals("regtest")) {
+            params = RegTestParams.get();
+            filePrefix = "regTest";
+        }
 
-        WalletAppKit appkit = new WalletAppKit(PARAMS, new File("."), "payfile-server-" + port) {
+        final int port = args.length > 2 ? Integer.parseInt(args[2]) : PORT;
+
+        WalletAppKit appkit = new WalletAppKit(params, new File("."), filePrefix + "payfile-server-" + port) {
             @Override
             protected void addWalletExtensions() throws Exception {
                 super.addWalletExtensions();
                 wallet().addExtension(new StoredPaymentChannelServerStates(wallet(), peerGroup()));
             }
         };
-        if (PARAMS == RegTestParams.get()) {
+        if (params == RegTestParams.get()) {
             appkit.connectToLocalHost();
         }
         appkit.setUserAgent("PayFile Server", "1.0").startAndWait();
