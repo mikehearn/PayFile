@@ -22,6 +22,8 @@ import com.google.bitcoin.core.TransactionBroadcaster;
 import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.kits.WalletAppKit;
 import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.PaymentChannelServer;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelServerStates;
@@ -33,6 +35,9 @@ import net.plan99.payfile.ProtocolException;
 import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import static joptsimple.util.RegexMatcher.*;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -40,6 +45,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
+import static org.junit.Assert.*;
+
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
@@ -60,7 +67,7 @@ public class Server implements Runnable {
     private static File directoryToServe;
     private static int defaultPricePerChunk;
     private static ArrayList<Payfile.File> manifest;
-    private static final NetworkParameters PARAMS = RegTestParams.get();
+    private static NetworkParameters params;
     // The client socket that we're talking to.
     private final Socket socket;
     private final Wallet wallet;
@@ -70,6 +77,7 @@ public class Server implements Runnable {
     private DataOutputStream output;
     private PaymentChannelServer payments;
     private long balance;
+    private static String filePrefix;
 
     public Server(Wallet wallet, TransactionBroadcaster transactionBroadcaster, Socket socket) {
         this.socket = socket;
@@ -81,21 +89,40 @@ public class Server implements Runnable {
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
 
+        // Usage: --file-directory=<file-directory> [--network=[mainnet|testnet|regtest]] [--port=<port>]"
+        OptionParser parser = new OptionParser();
+        parser.accepts("file-directory").withRequiredArg().isRequired();
+        parser.accepts("network").withRequiredArg().withValuesConvertedBy(regex("(mainnet)|(testnet)|(regtest)")).defaultsTo("mainnet");
+        parser.accepts("port").withRequiredArg().ofType(Integer.class).defaultsTo(PORT);
+
+        OptionSet options = parser.parse(args);
+
+        directoryToServe = new File(options.valueOf("file-directory").toString());
+        assertTrue(buildFileList());
+
+        if (options.valueOf("network").equals(("testnet"))) {
+            params = TestNet3Params.get();
+            filePrefix = "testNet3";
+        } else if (options.valueOf("network").equals(("mainnet"))) {
+            params = MainNetParams.get();
+            filePrefix = "mainNet";
+        } else if (options.valueOf("network").equals(("regtest"))) {
+            params = RegTestParams.get();
+            filePrefix = "regTest";
+        }
+
+        final int port = Integer.parseInt(options.valueOf("port").toString());
+
         defaultPricePerChunk = 100;   // satoshis
-        directoryToServe = new File(args[0]);
-        if (!buildFileList())
-            return;
 
-        final int port = args.length > 1 ? Integer.parseInt(args[1]) : PORT;
-
-        WalletAppKit appkit = new WalletAppKit(PARAMS, new File("."), "payfile-server-" + port) {
+        WalletAppKit appkit = new WalletAppKit(params, new File("."), filePrefix + "payfile-server-" + port) {
             @Override
             protected void addWalletExtensions() throws Exception {
                 super.addWalletExtensions();
                 wallet().addExtension(new StoredPaymentChannelServerStates(wallet(), peerGroup()));
             }
         };
-        if (PARAMS == RegTestParams.get()) {
+        if (params == RegTestParams.get()) {
             appkit.connectToLocalHost();
         }
         appkit.setUserAgent("PayFile Server", "1.0").startAndWait();
