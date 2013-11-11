@@ -21,23 +21,21 @@ import com.google.bitcoin.core.Sha256Hash;
 import com.google.bitcoin.core.TransactionBroadcaster;
 import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.kits.WalletAppKit;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.RegTestParams;
 import com.google.bitcoin.params.TestNet3Params;
-import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.PaymentChannelServer;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelServerStates;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+import joptsimple.*;
 import net.plan99.payfile.Payfile;
 import net.plan99.payfile.ProtocolException;
 import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import static joptsimple.util.RegexMatcher.*;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -45,11 +43,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
-import static org.junit.Assert.*;
-
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import static joptsimple.util.RegexMatcher.regex;
 
 /**
  * An instance of Server handles one client. The static main method opens up a listening socket and starts a thread
@@ -91,14 +88,31 @@ public class Server implements Runnable {
 
         // Usage: --file-directory=<file-directory> [--network=[mainnet|testnet|regtest]] [--port=<port>]"
         OptionParser parser = new OptionParser();
-        parser.accepts("file-directory").withRequiredArg().isRequired();
+        OptionSpec<File> fileDir = parser.accepts("file-directory").withRequiredArg().required().ofType(File.class);
         parser.accepts("network").withRequiredArg().withValuesConvertedBy(regex("(mainnet)|(testnet)|(regtest)")).defaultsTo("mainnet");
         parser.accepts("port").withRequiredArg().ofType(Integer.class).defaultsTo(PORT);
+        parser.accepts("help").forHelp();
+        parser.formatHelpWith(new BuiltinHelpFormatter(120, 10));
 
-        OptionSet options = parser.parse(args);
+        OptionSet options;
 
-        directoryToServe = new File(options.valueOf("file-directory").toString());
-        assertTrue(buildFileList());
+        try {
+            options = parser.parse(args);
+        } catch (OptionException e) {
+            System.err.println(e.getMessage());
+            System.err.println("");
+            parser.printHelpOn(System.err);
+            return;
+        }
+
+        if (options.has("help")) {
+            parser.printHelpOn(System.out);
+            return;
+        }
+
+        directoryToServe = options.valueOf(fileDir);
+        if (!buildFileList())
+            return;
 
         if (options.valueOf("network").equals(("testnet"))) {
             params = TestNet3Params.get();
@@ -162,6 +176,7 @@ public class Server implements Runnable {
             log.error("{} contains no files", directoryToServe);
             return false;
         }
+        log.info("Serving {} files", counter);
         return true;
     }
 
