@@ -84,11 +84,11 @@ public class PayFileClient {
         if (paymentChannelClient == null) {
             // Have to connect first.
             return initializePayments().thenCompose((v) -> {
-                paymentChannelClient.close();
+                paymentChannelClient.settle();
                 return settlementFuture;
             });
         } else {
-            paymentChannelClient.close();
+            paymentChannelClient.settle();
             return settlementFuture;
         }
     }
