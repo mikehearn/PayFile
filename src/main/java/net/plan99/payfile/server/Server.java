@@ -62,7 +62,7 @@ public class Server implements Runnable {
     private static final int PORT = 18754;
     private static final int MIN_ACCEPTED_CHUNKS = 5;   // Require download of at least this many chunks.
     private static File directoryToServe;
-    private static int defaultPricePerChunk;
+    private static int defaultPricePerChunk = 100;  // Satoshis
     private static ArrayList<Payfile.File> manifest;
     private static NetworkParameters params;
     // The client socket that we're talking to.
@@ -126,8 +126,6 @@ public class Server implements Runnable {
         }
 
         final int port = Integer.parseInt(options.valueOf("port").toString());
-
-        defaultPricePerChunk = 100;   // satoshis
 
         WalletAppKit appkit = new WalletAppKit(params, new File("."), filePrefix + "payfile-server-" + port) {
             @Override
