@@ -26,6 +26,7 @@ import com.google.bitcoin.params.RegTestParams;
 import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.PaymentChannelServer;
+import com.google.bitcoin.protocols.channels.PaymentChannelServerState;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelServerStates;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.protobuf.ByteString;
@@ -37,6 +38,7 @@ import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.*;
 import java.math.BigInteger;
 import java.net.ServerSocket;
@@ -44,8 +46,6 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import static joptsimple.util.RegexMatcher.regex;
 
 /**
@@ -72,8 +72,7 @@ public class Server implements Runnable {
     private final String peerName;
     private DataInputStream input;
     private DataOutputStream output;
-    private PaymentChannelServer payments;
-    private long balance;
+    @Nullable private PaymentChannelServer payments;
     private static String filePrefix;
 
     public Server(Wallet wallet, TransactionBroadcaster transactionBroadcaster, Socket socket) {
@@ -116,13 +115,13 @@ public class Server implements Runnable {
 
         if (options.valueOf("network").equals(("testnet"))) {
             params = TestNet3Params.get();
-            filePrefix = "testNet3";
+            filePrefix = "testnet-";
         } else if (options.valueOf("network").equals(("mainnet"))) {
             params = MainNetParams.get();
-            filePrefix = "mainNet";
+            filePrefix = "";
         } else if (options.valueOf("network").equals(("regtest"))) {
             params = RegTestParams.get();
-            filePrefix = "regTest";
+            filePrefix = "regtest-";
         }
 
         final int port = Integer.parseInt(options.valueOf("port").toString());
@@ -284,50 +283,47 @@ public class Server implements Runnable {
 
     private void payment(ByteString payment) {
         try {
-            maybeInitPayments();
             Protos.TwoWayChannelMessage msg = Protos.TwoWayChannelMessage.parseFrom(payment);
-            payments.receiveMessage(msg);
+            maybeInitPayments().receiveMessage(msg);
         } catch (InvalidProtocolBufferException e) {
             log.error("{}: Got an unreadable payment message: {}", peerName, e);
             forceClose();
         }
     }
 
-    private void maybeInitPayments() {
-        if (payments == null) {
-            BigInteger minPayment = BigInteger.valueOf(defaultPricePerChunk * MIN_ACCEPTED_CHUNKS);
-            payments = new PaymentChannelServer(transactionBroadcaster, wallet, minPayment, new PaymentChannelServer.ServerConnection() {
-                @Override
-                public void sendToClient(Protos.TwoWayChannelMessage msg) {
-                    Payfile.PayFileMessage.Builder m = Payfile.PayFileMessage.newBuilder();
-                    m.setPayment(msg.toByteString());
-                    m.setType(Payfile.PayFileMessage.Type.PAYMENT);
-                    writeMessage(m.build());
-                }
+    private PaymentChannelServer maybeInitPayments() {
+        if (payments != null)
+            return payments;
+        BigInteger minPayment = BigInteger.valueOf(defaultPricePerChunk * MIN_ACCEPTED_CHUNKS);
+        payments = new PaymentChannelServer(transactionBroadcaster, wallet, minPayment, new PaymentChannelServer.ServerConnection() {
+            @Override
+            public void sendToClient(Protos.TwoWayChannelMessage msg) {
+                Payfile.PayFileMessage.Builder m = Payfile.PayFileMessage.newBuilder();
+                m.setPayment(msg.toByteString());
+                m.setType(Payfile.PayFileMessage.Type.PAYMENT);
+                writeMessage(m.build());
+            }
 
-                @Override
-                public void destroyConnection(PaymentChannelCloseException.CloseReason reason) {
-                    if (reason != PaymentChannelCloseException.CloseReason.CLIENT_REQUESTED_CLOSE) {
-                        log.error("{}: Payments terminated abnormally: {}", peerName, reason);
-                    }
-                    payments = null;
+            @Override
+            public void destroyConnection(PaymentChannelCloseException.CloseReason reason) {
+                if (reason != PaymentChannelCloseException.CloseReason.CLIENT_REQUESTED_CLOSE) {
+                    log.error("{}: Payments terminated abnormally: {}", peerName, reason);
                 }
+                payments = null;
+            }
 
-                @Override
-                public void channelOpen(Sha256Hash contractHash) {
-                    log.info("{}: Payments negotiated: {}", peerName, contractHash);
-                }
+            @Override
+            public void channelOpen(Sha256Hash contractHash) {
+                log.info("{}: Payments negotiated: {}", peerName, contractHash);
+            }
 
-                @Override
-                public void paymentIncrease(BigInteger by, BigInteger to) {
-                    long byAmount = by.longValue();
-                    checkArgument(byAmount > 0);
-                    log.info("{}: Increased balance by {} to {}", peerName, byAmount, balance);
-                    balance += byAmount;
-                }
-            });
-            payments.connectionOpen();
-        }
+            @Override
+            public void paymentIncrease(BigInteger by, BigInteger to) {
+                log.info("{}: Increased balance by {} to {}", peerName, by, to);
+            }
+        });
+        payments.connectionOpen();
+        return payments;
     }
 
     private void downloadChunk(Payfile.DownloadChunk downloadChunk) throws ProtocolException {
@@ -345,10 +341,13 @@ public class Server implements Runnable {
                 throw new ProtocolException("DOWNLOAD_CHUNK: num_chunks must be >= 1");
             if (file.getPricePerChunk() > 0) {
                 // How many chunks can the client afford with their current balance?
-                checkState(balance >= 0);
+                PaymentChannelServerState state = payments == null ? null : payments.state();
+                if (state == null)
+                    throw new ProtocolException("Payment channel not initiated but this file is not free");
+                long balance = state.getBestValueToMe().longValue();
                 long affordableChunks = balance / file.getPricePerChunk();
                 if (affordableChunks < downloadChunk.getNumChunks())
-                    throw new ProtocolException("Insufficient payment received for requested amount of data");
+                    throw new ProtocolException("Insufficient payment received for requested amount of data: got " + balance);
                 balance -= downloadChunk.getNumChunks();
             }
             for (int i = 0; i < downloadChunk.getNumChunks(); i++) {

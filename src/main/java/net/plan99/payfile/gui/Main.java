@@ -52,7 +52,6 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
 // Payments:
 // - Progress indicator for negotiating a payment channel?
 // - Bug: If the server fails to broadcast the contract tx then the client gets out of sync with the server.
-// - Bug: If the client doesn't pay enough to settle the contract then the client gets out of sync with the server.
 //
 // Misc code quality:
 // - Consider switching to P2Proto (question: how to do SSL with that?). Simplifies the core protocol.

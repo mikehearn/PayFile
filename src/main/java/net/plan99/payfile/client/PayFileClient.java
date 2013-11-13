@@ -46,6 +46,8 @@ public class PayFileClient {
     private PaymentChannelClient paymentChannelClient;
     private volatile boolean running;
     private Consumer<Long> onPaymentMade;
+    private boolean freshChannel;
+    private long numPurchasedChunks;
 
     private boolean settling;
     private CompletableFuture<Void> settlementFuture;
@@ -283,8 +285,9 @@ public class PayFileClient {
             }
 
             @Override
-            public void channelOpen() {
-                log.debug("{}: Payment channel negotiated", socket);
+            public void channelOpen(boolean wasInitiated) {
+                log.info("{}: Payment channel negotiated{}", socket, wasInitiated ? ", was initiated" : "");
+                freshChannel = wasInitiated;
                 future.complete(null);
             }
         });
@@ -303,12 +306,24 @@ public class PayFileClient {
     private void downloadNextChunk(File file) throws IOException {
         if (currentFuture.isCompletedExceptionally())
             return;
-        // Write two messages, one after the other: add to our balance, then spend it.
         try {
             if (paymentChannelClient != null) {
-                paymentChannelClient.incrementPayment(BigInteger.valueOf(file.pricePerChunk));
-                if (onPaymentMade != null)
-                    onPaymentMade.accept(file.pricePerChunk);
+                // Write two messages, one after the other: possibly add to our balance, then spend it.
+                if (freshChannel) {
+                    freshChannel = false;
+                    // If we opened a fresh channel, we have automatically made a min payment on the channel equal
+                    // to the dust limit. Divide to find out how many chunks that's worth here. We might end up
+                    // overpaying slightly this way: a smarter approach would handle the remainder from the division.
+                    numPurchasedChunks = paymentChannelClient.state().getValueSpent().longValue() / file.pricePerChunk;
+                    log.info("New channel, have pre-paid {} chunks", numPurchasedChunks);
+                }
+                if (numPurchasedChunks == 0) {
+                    paymentChannelClient.incrementPayment(BigInteger.valueOf(file.pricePerChunk));
+                    numPurchasedChunks++;
+                    if (onPaymentMade != null)
+                        onPaymentMade.accept(file.pricePerChunk);
+                }
+                numPurchasedChunks--;
             }
         } catch (ValueOutOfRangeException e) {
             // We ran out of moneyzz???
