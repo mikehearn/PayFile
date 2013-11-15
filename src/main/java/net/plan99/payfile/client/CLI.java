@@ -19,14 +19,17 @@ package net.plan99.payfile.client;
 import asg.cliche.Command;
 import asg.cliche.Param;
 import asg.cliche.ShellFactory;
-import com.google.bitcoin.core.AbstractWalletEventListener;
-import com.google.bitcoin.core.Transaction;
-import com.google.bitcoin.core.Utils;
-import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.*;
 import com.google.bitcoin.kits.WalletAppKit;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelClientStates;
 import com.google.bitcoin.utils.BriefLogFormatter;
+import joptsimple.BuiltinHelpFormatter;
+import joptsimple.OptionException;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -35,22 +38,39 @@ import java.math.BigInteger;
 import java.net.Socket;
 import java.util.List;
 
+import static joptsimple.util.RegexMatcher.regex;
+
 public class CLI {
-    public static final RegTestParams PARAMS = RegTestParams.get();
+    public static NetworkParameters params;
+    private static String filePrefix;
 
     private PayFileClient client;
     private List<PayFileClient.File> files;
     private WalletAppKit appkit;
 
     public CLI(Socket socket) throws IOException {
-        appkit = new WalletAppKit(PARAMS, new File("."), "payfile-cli") {
+        appkit = new WalletAppKit(params, new File("."), filePrefix + "payfile-cli") {
             @Override
             protected void addWalletExtensions() throws Exception {
                 super.addWalletExtensions();
                 wallet().addExtension(new StoredPaymentChannelClientStates(wallet(), peerGroup()));
             }
         };
-        appkit.connectToLocalHost().startAndWait();
+
+        if (params == RegTestParams.get()) {
+            appkit.connectToLocalHost();   // You should run a regtest mode bitcoind locally.
+        } else if (params == MainNetParams.get()) {
+            // Checkpoints are block headers that ship inside our app: for a new user, we pick the last header
+            // in the checkpoints file and then download the rest from the network. It makes things much faster.
+            // Checkpoint files are made using the BuildCheckpoints tool and usually we have to download the
+            // last months worth or more (takes a few seconds).
+            appkit.setCheckpoints(getClass().getResourceAsStream("checkpoints"));
+        }
+
+        appkit.setBlockingStartup(false)
+                .setUserAgent("Payfile CLI","1.0")
+                .startAndWait();
+
         appkit.wallet().allowSpendingUnconfirmedTransactions();
         appkit.wallet().addEventListener(new AbstractWalletEventListener() {
             @Override
@@ -58,7 +78,7 @@ public class CLI {
                 System.out.println("Received money: " + Utils.bitcoinValueToFriendlyString(tx.getValueSentToMe(appkit.wallet())));
             }
         });
-        System.out.println("Send coins to " + appkit.wallet().getKeys().get(0).toAddress(PARAMS));
+        System.out.println("Send coins to " + appkit.wallet().getKeys().get(0).toAddress(params));
         System.out.println("Your balance is " + Utils.bitcoinValueToFriendlyString(appkit.wallet().getBalance()));
         client = new PayFileClient(socket, appkit.wallet());
     }
@@ -131,7 +151,40 @@ public class CLI {
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
         //Logger.getLogger("").setLevel(Level.OFF);
-        String server = args[0];
+        // allow client to choose another network for testing by passing through an argument.
+        OptionParser parser = new OptionParser();
+        parser.accepts("network").withRequiredArg().withValuesConvertedBy(regex("(mainnet)|(testnet)|(regtest)")).defaultsTo("mainnet");
+        parser.accepts("server").withRequiredArg().required();
+        parser.accepts("help").forHelp();
+        parser.formatHelpWith(new BuiltinHelpFormatter(120, 10));
+        OptionSet options;
+
+        try {
+            options = parser.parse(args);
+        } catch (OptionException e) {
+            System.err.println(e.getMessage());
+            System.err.println("");
+            parser.printHelpOn(System.err);
+            return;
+        }
+
+        if (options.has("help")) {
+            parser.printHelpOn(System.out);
+            return;
+        }
+
+        if (options.valueOf("network").equals(("testnet"))) {
+            params = TestNet3Params.get();
+            filePrefix = "testnet-";
+        } else if (options.valueOf("network").equals(("mainnet"))) {
+            params = MainNetParams.get();
+            filePrefix = "";
+        } else if (options.valueOf("network").equals(("regtest"))) {
+            params = RegTestParams.get();
+            filePrefix = "regtest-";
+        }
+
+        String server = options.valueOf("server").toString();
         System.out.println("Connecting to " + server);
         Socket socket = new Socket(server, 18754);
         final CLI cli = new CLI(socket);
