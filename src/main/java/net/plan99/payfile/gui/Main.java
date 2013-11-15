@@ -21,6 +21,7 @@ import com.google.bitcoin.core.NetworkParameters;
 import com.google.bitcoin.kits.WalletAppKit;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelClientStates;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.BriefLogFormatter;
@@ -35,6 +36,10 @@ import javafx.scene.Scene;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import joptsimple.BuiltinHelpFormatter;
+import joptsimple.OptionException;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
 import net.plan99.payfile.client.PayFileClient;
 import net.plan99.payfile.gui.utils.TextFieldValidator;
 
@@ -45,6 +50,7 @@ import java.net.Socket;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
 
+import static joptsimple.util.RegexMatcher.regex;
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
 
 // To do list:
@@ -74,12 +80,13 @@ public class Main extends Application {
     public static final String APP_NAME = "PayFile";
     public static final int CONNECT_TIMEOUT_MSEC = 2000;
 
-    public static NetworkParameters params = RegTestParams.get();
+    public static NetworkParameters params;
 
     public static WalletAppKit bitcoin;
     public static Main instance;
     public static PayFileClient client;
     public static HostAndPort serverAddress;
+    private static String filePrefix;
 
     private StackPane uiStack;
     public Pane mainUI;
@@ -129,7 +136,7 @@ public class Main extends Application {
         // That must be specified each time.
         Threading.USER_THREAD = Platform::runLater;
         // Create the app kit. It won't do any heavyweight initialization until after we start it.
-        bitcoin = new WalletAppKit(params, new File("."), APP_NAME) {
+        bitcoin = new WalletAppKit(params, new File("."), filePrefix + APP_NAME ) {
             @Override
             protected void addWalletExtensions() throws Exception {
                 super.addWalletExtensions();
@@ -242,7 +249,39 @@ public class Main extends Application {
         super.stop();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+        // allow client to choose another network for testing by passing through an argument.
+        OptionParser parser = new OptionParser();
+        parser.accepts("network").withRequiredArg().withValuesConvertedBy(regex("(mainnet)|(testnet)|(regtest)")).defaultsTo("mainnet");
+        parser.accepts("help").forHelp();
+        parser.formatHelpWith(new BuiltinHelpFormatter(120, 10));
+        OptionSet options;
+
+        try {
+            options = parser.parse(args);
+        } catch (OptionException e) {
+            System.err.println(e.getMessage());
+            System.err.println("");
+            parser.printHelpOn(System.err);
+            return;
+        }
+
+        if (options.has("help")) {
+            parser.printHelpOn(System.out);
+            return;
+        }
+
+        if (options.valueOf("network").equals(("testnet"))) {
+            params = TestNet3Params.get();
+            filePrefix = "testnet-";
+        } else if (options.valueOf("network").equals(("mainnet"))) {
+            params = MainNetParams.get();
+            filePrefix = "";
+        } else if (options.valueOf("network").equals(("regtest"))) {
+            params = RegTestParams.get();
+            filePrefix = "regtest-";
+        }
+
         launch(args);
     }
 }
