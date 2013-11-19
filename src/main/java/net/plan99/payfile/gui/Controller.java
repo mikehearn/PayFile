@@ -128,7 +128,7 @@ public class Controller {
             FileOutputStream fileStream = new FileOutputStream(destination);
             final long startTime = System.currentTimeMillis();
             cancelBtn.setVisible(true);
-            progressBarLabel.setText("Downloading " + downloadingFile);
+            progressBarLabel.setText("Downloading " + downloadingFile.getFileName());
             // Make the UI update whilst the download is in progress: progress bar and balance label.
             ProgressOutputStream stream = new ProgressOutputStream(fileStream, downloadingFile.getSize());
             progressBar.progressProperty().bind(stream.progressProperty());
