@@ -2,6 +2,7 @@ package net.plan99.payfile.client;
 
 import com.google.bitcoin.core.Sha256Hash;
 import com.google.bitcoin.core.Transaction;
+import com.google.bitcoin.core.Utils;
 import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.protocols.channels.PaymentChannelClient;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
@@ -151,7 +152,7 @@ public class PayFileClient {
 
         @Override
         public String toString() {
-            return getFileName();
+            return String.format("%s\nPrice: %s BTC", getFileName(), Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(getPrice())));
         }
 
         public long getBytesDownloaded() {

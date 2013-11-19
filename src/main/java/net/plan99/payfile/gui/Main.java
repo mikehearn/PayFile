@@ -16,7 +16,6 @@
 
 package net.plan99.payfile.gui;
 
-import com.aquafx_project.AquaFx;
 import com.google.bitcoin.core.NetworkParameters;
 import com.google.bitcoin.kits.WalletAppKit;
 import com.google.bitcoin.params.MainNetParams;
@@ -64,7 +63,6 @@ import static net.plan99.payfile.gui.utils.GuiUtils.*;
 // - SSL support
 //
 // Generic UI:
-// - Render the files with the descriptions and prices as well.
 // - Solve the Mac menubar issue. Port the Mac specific tweaks to wallet-template.
 // - Write a test plan that exercises every reasonable path through the app and test it.
 // - Get an Apple developer ID and a Windows codesigning cert.
@@ -112,9 +110,12 @@ public class Main extends Application {
 
     private void init(Stage mainWindow) throws IOException {
         this.mainWindow = mainWindow;
-        if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+
+        // commented out for now as Modena looks better, but might want to bring this back.
+        /* if (System.getProperty("os.name").toLowerCase().contains("mac")) {
             AquaFx.style();
-        }
+        } */
+
         // Load the GUI. The Controller class will be automagically created and wired up.
         URL location = getClass().getResource("main.fxml");
         FXMLLoader loader = new FXMLLoader(location);
