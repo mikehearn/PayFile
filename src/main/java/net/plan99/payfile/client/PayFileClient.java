@@ -175,6 +175,12 @@ public class PayFileClient {
             return size;
         }
 
+        public void reset() {
+            bytesDownloaded = 0;
+            nextChunk = 0;
+            downloadStream = null;
+        }
+
         public boolean isAffordable() {
             long totalPrice = getPrice();
             if (totalPrice == 0)
@@ -213,7 +219,7 @@ public class PayFileClient {
         file.downloadStream = outputStream;
 
         currentFuture = file.completionFuture = new CompletableFuture<>();
-        file.completionFuture.whenComplete((v, exception) -> { if (exception != null) file.downloadStream = null; });
+        file.completionFuture.whenComplete((v, exception) -> { file.reset(); });
 
         // Set up payments and then start the download.
         if (file.getPrice() > 0) {
