@@ -28,29 +28,24 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import java.io.IOException;
 import java.util.function.BiConsumer;
 
 import static com.google.common.base.Preconditions.checkState;
+import static net.plan99.payfile.utils.Exceptions.evalUnchecked;
 
 public class GuiUtils {
     public static void runAlert(BiConsumer<Stage, AlertWindowController> setup) {
-        try {
-            // JavaFX2 doesn't actually have a standard alert template. Instead the Scene Builder app will create FXML
-            // files for an alert window for you, and then you customise it as you see fit. I guess it makes sense in
-            // an odd sort of way.
-            Stage dialogStage = new Stage();
-            dialogStage.initModality(Modality.APPLICATION_MODAL);
-            FXMLLoader loader = new FXMLLoader(GuiUtils.class.getResource("alert.fxml"));
-            Pane pane = loader.load();
-            AlertWindowController controller = loader.getController();
-            setup.accept(dialogStage, controller);
-            dialogStage.setScene(new Scene(pane));
-            dialogStage.showAndWait();
-        } catch (IOException e) {
-            // We crashed whilst trying to show the alert dialog (this should never happen). Give up!
-            throw new RuntimeException(e);
-        }
+        // JavaFX doesn't actually have a standard alert template. Instead the Scene Builder app will create FXML
+        // files for an alert window for you, and then you customise it as you see fit. I guess it makes sense in
+        // an odd sort of way.
+        Stage dialogStage = new Stage();
+        dialogStage.initModality(Modality.APPLICATION_MODAL);
+        FXMLLoader loader = new FXMLLoader(GuiUtils.class.getResource("alert.fxml"));
+        Pane pane = evalUnchecked(() -> (Pane) loader.load());
+        AlertWindowController controller = loader.getController();
+        setup.accept(dialogStage, controller);
+        dialogStage.setScene(new Scene(pane));
+        dialogStage.showAndWait();
     }
 
     public static void crashAlert(Throwable t) {

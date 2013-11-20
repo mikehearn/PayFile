@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import static joptsimple.util.RegexMatcher.regex;
+import static net.plan99.payfile.utils.Exceptions.runUnchecked;
 
 /**
  * An instance of Server handles one client. The static main method opens up a listening socket and starts a thread
@@ -214,9 +215,7 @@ public class Server implements Runnable {
     }
 
     private void forceClose() {
-        try {
-            socket.close();
-        } catch (IOException ignored) {}
+        runUnchecked(socket::close);
     }
 
     private void sendError(ProtocolException e) throws IOException {

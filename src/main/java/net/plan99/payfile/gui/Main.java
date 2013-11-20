@@ -51,6 +51,8 @@ import java.util.concurrent.CompletableFuture;
 
 import static joptsimple.util.RegexMatcher.regex;
 import static net.plan99.payfile.gui.utils.GuiUtils.*;
+import static net.plan99.payfile.utils.Exceptions.evalUnchecked;
+import static net.plan99.payfile.utils.Exceptions.runUnchecked;
 
 // To do list:
 //
@@ -196,17 +198,14 @@ public class Main extends Application {
         checkGuiThread();
         OverlayUI<T> pair = new OverlayUI<>(node, controller);
         // Auto-magically set the overlayUi member, if it's there.
-        try {
-            controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
-        } catch (IllegalAccessException | NoSuchFieldException ignored) {
-        }
+        runUnchecked(() -> controller.getClass().getDeclaredField("overlayUi").set(controller, pair));
         pair.show();
         return pair;
     }
 
     /** Loads the FXML file with the given name, blurs out the main UI and puts this one on top. */
     public <T> OverlayUI<T> overlayUI(String name) {
-        try {
+        return evalUnchecked(() -> {
             checkGuiThread();
             // Load the UI from disk.
             URL location = getClass().getResource(name);
@@ -215,15 +214,10 @@ public class Main extends Application {
             T controller = loader.getController();
             OverlayUI<T> pair = new OverlayUI<>(ui, controller);
             // Auto-magically set the overlayUi member, if it's there.
-            try {
-                controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
-            } catch (IllegalAccessException | NoSuchFieldException ignored) {
-            }
+            controller.getClass().getDeclaredField("overlayUi").set(controller, pair);
             pair.show();
             return pair;
-        } catch (IOException e) {
-            throw new RuntimeException(e);  // Can't happen.
-        }
+        });
     }
 
     public static CompletableFuture<PayFileClient> connect(HostAndPort server) {
@@ -232,16 +226,14 @@ public class Main extends Application {
     }
 
     public static CompletableFuture<PayFileClient> connect(HostAndPort server, int timeoutMsec) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
+        return CompletableFuture.supplyAsync(() ->
+            evalUnchecked(() -> {
                 final InetSocketAddress address = new InetSocketAddress(server.getHostText(), server.getPort());
                 final Socket socket = new Socket();
                 socket.connect(address, timeoutMsec);
                 return new PayFileClient(socket, bitcoin.wallet());
-            } catch (Exception e) {
-                throw Throwables.propagate(e);
-            }
-        });
+            })
+        );
     }
 
     @Override

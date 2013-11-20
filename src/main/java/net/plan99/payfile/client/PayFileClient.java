@@ -29,7 +29,8 @@ import java.util.function.Consumer;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.base.Throwables.propagate;
+import static net.plan99.payfile.utils.Exceptions.evalUnchecked;
+import static net.plan99.payfile.utils.Exceptions.runUnchecked;
 
 public class PayFileClient {
     private static final Logger log = LoggerFactory.getLogger(PayFileClient.class);
@@ -54,29 +55,23 @@ public class PayFileClient {
     private CompletableFuture<Void> settlementFuture;
 
     public PayFileClient(Socket socket, Wallet wallet) {
-        try {
-            this.socket = socket;
-            this.input = new DataInputStream(socket.getInputStream());
-            this.output = new DataOutputStream(socket.getOutputStream());
-            this.wallet = wallet;
+        this.socket = socket;
+        this.input = new DataInputStream(evalUnchecked(socket::getInputStream));
+        this.output = new DataOutputStream(evalUnchecked(socket::getOutputStream));
+        this.wallet = wallet;
 
-            ClientThread thread = new ClientThread();
-            thread.setName(socket.toString());
-            thread.setDaemon(true);
-            thread.start();
-        } catch (IOException e) {
-            throw propagate(e);
-        }
+        ClientThread thread = new ClientThread();
+        thread.setName(socket.toString());
+        thread.setDaemon(true);
+        thread.start();
     }
 
     public void disconnect() {
         running = false;
         if (paymentChannelClient != null)
             paymentChannelClient.connectionClosed();
-        try {
-            input.close();
-            output.close();
-        } catch (IOException ignored) {}
+        runUnchecked(input::close);
+        runUnchecked(output::close);
     }
 
     public CompletableFuture<Void> settlePaymentChannel() {
@@ -227,18 +222,14 @@ public class PayFileClient {
                 throw new ValueOutOfRangeException("Cannot afford this file");
             log.info("Price is {}, ensuring payments are initialised ... ", file.getPrice());
             initializePayments().handle((v, ex) -> {
-                try {
-                    if (ex == null) {
-                        log.info("Payments initialised. Downloading file {} {}", file.getHandle(), file.getFileName());
-                        currentDownloads.add(file);
-                        downloadNextChunk(file);
-                    } else {
-                        currentFuture.completeExceptionally(ex);
-                    }
-                    return null;
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                if (ex == null) {
+                    log.info("Payments initialised. Downloading file {} {}", file.getHandle(), file.getFileName());
+                    currentDownloads.add(file);
+                    runUnchecked(() -> downloadNextChunk(file));
+                } else {
+                    currentFuture.completeExceptionally(ex);
                 }
+                return null;
             });
         } else {
             log.info("Downloading file {} {}", file.getHandle(), file.getFileName());
@@ -265,11 +256,7 @@ public class PayFileClient {
                         .setType(Payfile.PayFileMessage.Type.PAYMENT)
                         .setPayment(paymentMsg.toByteString())
                         .build();
-                try {
-                    writeMessage(msg);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                runUnchecked(() -> writeMessage(msg));
             }
 
             @Override
@@ -313,28 +300,25 @@ public class PayFileClient {
     private void downloadNextChunk(File file) throws IOException {
         if (currentFuture.isCompletedExceptionally())
             return;
-        try {
-            if (paymentChannelClient != null) {
-                // Write two messages, one after the other: possibly add to our balance, then spend it.
-                if (freshChannel) {
-                    freshChannel = false;
-                    // If we opened a fresh channel, we have automatically made a min payment on the channel equal
-                    // to the dust limit. Divide to find out how many chunks that's worth here. We might end up
-                    // overpaying slightly this way: a smarter approach would handle the remainder from the division.
-                    numPurchasedChunks = paymentChannelClient.state().getValueSpent().longValue() / file.pricePerChunk;
-                    log.info("New channel, have pre-paid {} chunks", numPurchasedChunks);
-                }
-                if (numPurchasedChunks == 0) {
-                    paymentChannelClient.incrementPayment(BigInteger.valueOf(file.pricePerChunk));
-                    numPurchasedChunks++;
-                    if (onPaymentMade != null)
-                        onPaymentMade.accept(file.pricePerChunk);
-                }
-                numPurchasedChunks--;
+        if (paymentChannelClient != null) {
+            // Write two messages, one after the other: possibly add to our balance, then spend it.
+            if (freshChannel) {
+                freshChannel = false;
+                // If we opened a fresh channel, we have automatically made a min payment on the channel equal
+                // to the dust limit. Divide to find out how many chunks that's worth here. We might end up
+                // overpaying slightly this way: a smarter approach would handle the remainder from the division.
+                numPurchasedChunks = paymentChannelClient.state().getValueSpent().longValue() / file.pricePerChunk;
+                log.info("New channel, have pre-paid {} chunks", numPurchasedChunks);
             }
-        } catch (ValueOutOfRangeException e) {
-            // We ran out of moneyzz???
-            throw new RuntimeException(e);
+            if (numPurchasedChunks == 0) {
+                /* ValueOutOfRangeException */ runUnchecked(() ->
+                    paymentChannelClient.incrementPayment(BigInteger.valueOf(file.pricePerChunk))
+                );
+                numPurchasedChunks++;
+                if (onPaymentMade != null)
+                    onPaymentMade.accept(file.pricePerChunk);
+            }
+            numPurchasedChunks--;
         }
         Payfile.DownloadChunk.Builder downloadChunk = Payfile.DownloadChunk.newBuilder();
         downloadChunk.setHandle(file.getHandle());
