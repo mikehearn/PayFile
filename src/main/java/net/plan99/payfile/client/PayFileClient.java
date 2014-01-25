@@ -1,13 +1,9 @@
 package net.plan99.payfile.client;
 
-import com.google.bitcoin.core.Sha256Hash;
-import com.google.bitcoin.core.Transaction;
-import com.google.bitcoin.core.Utils;
-import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.*;
 import com.google.bitcoin.protocols.channels.PaymentChannelClient;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelClientStates;
-import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import net.plan99.payfile.Payfile;
@@ -208,7 +204,7 @@ public class PayFileClient {
         return future;
     }
 
-    public CompletableFuture<Void> downloadFile(File file, OutputStream outputStream) throws IOException, ValueOutOfRangeException {
+    public CompletableFuture<Void> downloadFile(File file, OutputStream outputStream) throws IOException, InsufficientMoneyException {
         if (file.downloadStream != null)
             throw new IllegalStateException("Already downloading this file");
         file.downloadStream = outputStream;
@@ -219,7 +215,7 @@ public class PayFileClient {
         // Set up payments and then start the download.
         if (file.getPrice() > 0) {
             if (!file.isAffordable())
-                throw new ValueOutOfRangeException("Cannot afford this file");
+                throw new InsufficientMoneyException(BigInteger.valueOf(file.getPrice() - getRemainingBalance().longValue()), "Cannot afford this file");
             log.info("Price is {}, ensuring payments are initialised ... ", file.getPrice());
             initializePayments().handle((v, ex) -> {
                 if (ex == null) {
@@ -264,7 +260,7 @@ public class PayFileClient {
                 if (reason != PaymentChannelCloseException.CloseReason.CLIENT_REQUESTED_CLOSE) {
                     log.warn("{}: Payment channel terminating with reason {}", socket, reason);
                     if (reason == PaymentChannelCloseException.CloseReason.SERVER_REQUESTED_TOO_MUCH_VALUE) {
-                        future.completeExceptionally(new ValueOutOfRangeException("Insufficient balance"));
+                        future.completeExceptionally(new InsufficientMoneyException(paymentChannelClient.getMissing()));
                     } else {
                         if (currentFuture != null)
                             currentFuture.completeExceptionally(new PaymentChannelCloseException("Unexpected payment channel termination", reason));
@@ -399,7 +395,7 @@ public class PayFileClient {
             paymentChannelClient.receiveMessage(paymentMessage);
         } catch (InvalidProtocolBufferException e) {
             throw new ProtocolException("Could not parse payment message: " + e.getMessage());
-        } catch (ValueOutOfRangeException e) {
+        } catch (InsufficientMoneyException e) {
             // This shouldn't happen as we shouldn't try to open a channel larger than what we can afford.
             throw new RuntimeException(e);
         }
