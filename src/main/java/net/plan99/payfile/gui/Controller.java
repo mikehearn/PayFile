@@ -16,11 +16,7 @@
 
 package net.plan99.payfile.gui;
 
-import com.google.bitcoin.core.AbstractWalletEventListener;
-import com.google.bitcoin.core.DownloadListener;
-import com.google.bitcoin.core.Utils;
-import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
+import com.google.bitcoin.core.*;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -117,7 +113,7 @@ public class Controller {
         try {
             final PayFileClient.File downloadingFile = checkNotNull(selectedFile.get());
             if (downloadingFile.getPrice() > getBalance().longValue())
-                throw new ValueOutOfRangeException("");
+                throw new InsufficientMoneyException(BigInteger.valueOf(downloadingFile.getPrice() - getBalance().longValue()));
             // Ask the user where to put it.
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Select download directory");
@@ -153,12 +149,13 @@ public class Controller {
                 }
                 return null;
             }, Platform::runLater);
-        } catch (ValueOutOfRangeException e) {
+        } catch (InsufficientMoneyException e) {
             if (destination != null)
                 destination.delete();
             final String price = Utils.bitcoinValueToFriendlyString(BigInteger.valueOf(selectedFile.get().getPrice()));
+            final String missing = String.valueOf(e.missing);
             informationalAlert("Insufficient funds",
-                    "This file costs %s BTC but you can't afford that. Try sending some money to this app first.", price);
+                    "This file costs %s BTC but you can't afford that. You need %s satoshis to complete the transaction.", price, missing);
         }
     }
 

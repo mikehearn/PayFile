@@ -1,9 +1,6 @@
 package net.plan99.payfile.gui;
 
-import com.google.bitcoin.core.Address;
-import com.google.bitcoin.core.Transaction;
-import com.google.bitcoin.core.TransactionConfidence;
-import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.*;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import javafx.application.Platform;
@@ -39,9 +36,10 @@ public class SendMoneyController {
     public void send(ActionEvent event) {
         Address destination = evalUnchecked(() -> new Address(Main.params, address.getText()));
         Wallet.SendRequest req = Wallet.SendRequest.emptyWallet(destination);
-        sendResult = Main.bitcoin.wallet().sendCoins(req);
-        if (sendResult == null) {
-            // We couldn't empty the wallet for some reason. TODO: When bitcoinj issue 425 is fixed, be more helpful
+        try {
+            sendResult = Main.bitcoin.wallet().sendCoins(req);
+        } catch (InsufficientMoneyException e) {
+            // We couldn't empty the wallet for some reason.
             informationalAlert("Could not empty the wallet",
                     "You may have too little money left in the wallet to make a transaction.");
             overlayUi.done();
